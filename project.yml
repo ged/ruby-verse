@@ -1,0 +1,26 @@
+--- 
+excluded_pkgfiles: []
+
+project_pubdir: /usr/local/www/public/code/
+project_pubhost: deveiate
+project_homepage: http://deveiate.org/rbverse.html
+project_requirements: 
+  Verse: ">= 0.6.1"
+release_smtphost: mail.faeriemud.org
+project_description: |-
+  This is a Ruby binding for the Verse network protocol. Verse a network 
+  protocol that lets multiple applications act together as one large application by 
+  sharing data over a network.
+release_mailto: Ruby-Talk List <ruby-talk@ruby-lang.org>
+project_dependencies: {}
+
+project_summary: A Ruby binding for Verse
+version_file: verse.rb
+additional_pkgfiles: []
+
+dev_dependencies: 
+  rake-compiler: ">=0.7.0"
+authors: 
+  Michael Granger: ged@FaerieMUD.org
+post_install_message: ""
+project_name: rbverse
