@@ -26,6 +26,7 @@ extern VALUE rbverse_mVerseConstants;
 extern VALUE rbverse_cVerseSession;
 
 extern VALUE rbverse_eVerseConnectError;
+extern VALUE rbverse_eVerseSessionError;
 
 
 
@@ -41,10 +42,10 @@ typedef struct rbverse_session {
 } rbverse_SESSION;
 
 typedef struct rbverse_connect_accept_event {
-	void		*session;
-	VNodeID		avatar;
-	const char	*address;
-	uint8		*hostid;
+	rbverse_SESSION *session;
+	VNodeID		    avatar;
+	const char	    *address;
+	uint8		    *hostid;
 } rbverse_CONNECT_ACCEPT_EVENT;
 
 /* --------------------------------------------------------------
@@ -73,6 +74,7 @@ void rbverse_log( const char *, const char *, va_dcl );
 extern inline uint8 * rbverse_str2host_id( VALUE );
 extern inline VALUE rbverse_host_id2str( const uint8 * );
 extern void * rbverse_sysfail( void * );
+extern VALUE rbverse_verse_session_from_vsession( VSession, VALUE );
 
 
 /* --------------------------------------------------------------

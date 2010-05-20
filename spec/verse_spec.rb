@@ -33,7 +33,7 @@ describe Verse do
 	include Verse::SpecHelpers
 
 	before( :all ) do
-		setup_logging( :info )
+		setup_logging( :debug )
 		@port = 45196;
 		Verse.port = @port
 	end
@@ -56,7 +56,7 @@ describe Verse do
 
 
 	it "returns a version string with a build number if asked" do
-		Verse.version_string(true).should =~ /\w+ [\d.]+ \(build \d+\)/
+		Verse.version_string(true).should =~ /\w+ [\d.]+ \(build \w+\)/
 	end
 
 
@@ -64,8 +64,33 @@ describe Verse do
 		Verse.library_version.should =~ /^r(\d+)p(\d+).*/i
 	end
 
+	describe "global callbacks" do
+		it "can set a handler for 'connect' events" do
+			handler = lambda {|*args| }
+			Verse.on_connect( &handler )
+			Verse.on_connect.should == handler
+		end
+	end
 
 	describe "ping functions" do
+
+		before( :each ) do
+			setup_logging( :debug )
+			Verse.on_ping = nil
+		end
+
+		it "can set a handler for 'ping' events via a block" do
+			Verse.on_ping.should be_nil()
+			Verse.on_ping {|*args|  }
+			Verse.on_ping.should be_a( Proc )
+		end
+
+		it "can set a handler for 'ping' events via a setter" do
+			Verse.on_ping.should be_nil()
+			handler = lambda {|*args| }
+			Verse.on_ping = handler
+			Verse.on_ping.should == handler
+		end
 
 		it "can ping a server and receive pings" do
 			message = nil
@@ -112,6 +137,10 @@ describe Verse do
 
 	describe "host ID functions" do
 
+		before( :each ) do
+			setup_logging( :debug )
+		end
+
 		it "can generate a new host ID" do
 			hostid = Verse.create_host_id
 			hostid.length.should == HOST_ID_SIZE
@@ -147,7 +176,7 @@ describe Verse do
 
 	end
 
-	describe " logging subsystem" do
+	describe "logging subsystem" do
 		before(:each) do
 			Verse.reset_logger
 		end
@@ -167,7 +196,7 @@ describe Verse do
 
 	end
 
-	describe " logging subsystem with new defaults" do
+	describe "logging subsystem with new defaults" do
 		before( :all ) do
 			@original_logger = Verse.default_logger
 			@original_log_formatter = Verse.default_log_formatter

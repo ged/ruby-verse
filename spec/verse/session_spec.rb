@@ -45,35 +45,54 @@ describe Verse::Session do
 		session.address.should == TEST_ADDRESS
 	end
 
+	it "can acquire the session mutex for the null session" do
+		current_session = nil
+		Verse::Session.synchronize { current_session = Verse::Session.current }
+		current_session.should == nil
+	end
 
 	describe "acting in the client role" do
 		before( :each ) do
-			@port = 45196
+			@port = 4950
 			Verse.port = @port
+			@address = "localhost:#@port"
 			@hostid = Verse.create_host_id
-			@session = Verse::Session.new
+			@session = Verse::Session.new( @address )
 		end
 
 		it "can register a callback for `connect_accept' events" do
+			session = nil
+
+			Verse.on_connect do |name, pass, address, exp_hostid|
+				Verse.log.notice "Got connect: %p" % [[ name, pass, address, exp_hostid ]]
+				session = Verse.connect_accept( 1, address, exp_hostid )
+			end
+
 			client_thread = Thread.new do
 				Thread.current.abort_on_exception = true
 				callback_values = nil
+
+				@session.connect( "testuser", "testpass" )
 				@session.on_connect_accept do |avatar, address, host_id|
+					Verse.log.notice "Got connect_accept: %p" % [[ avatar, address, host_id ]]
 					callback_values = [avatar, address, host_id]
 				end
 
 				while callback_values.nil?
-					Verse.callback_update( 1 )
+					Verse.callback_update( 0.25 )
 				end
 
 				callback_values
 			end
 
-			Verse.connect_accept( 1, "localhost:#@port", @hostid )
+			while client_thread.alive?
+				Verse.callback_update( 0.25 )
+			end
 
 			rval = client_thread.value
+			rval.should == [ 1, @address, @hostid ]
 
-			rval.should == [ 1, "localhost:#@port", @hostid ]
+			session.should be_a( Verse::Session )
 		end
 
 		it "can connect to a Verse host"
@@ -84,7 +103,7 @@ describe Verse::Session do
 	describe "acting in the server role" do
 
 		before( :each ) do
-			@port = 45196
+			@port = 4950
 			Verse.port = @port
 			@hostid = Verse.create_host_id
 			@session = Verse::Session.new
