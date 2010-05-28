@@ -516,6 +516,37 @@ rbverse_verse_session_on_connect_accept_eq( VALUE self, VALUE handler ) {
 }
 
 
+/* 
+ * call-seq: 
+ *    Verse.connect_terminate( address, message )
+ * 
+ * Sent by a client that wishes to disconnect from a host, before
+ * actually going ahead and severing the connection. This gives the
+ * host a chance to gracefully free any resources dedicated to this
+ * client, rather than having to find out after the fact that it has
+ * disconnected.
+ * 
+ * This command needs to be sent even when there is no established
+ * connection, so it also requires the address of the machine to send
+ * it to. This information is implementation/API-level though, it does
+ * not appear in the command's network representation.
+ * 
+ */
+static VALUE
+rbverse_verse_connect_terminate( VALUE module, VALUE message ) {
+	rbverse_SESSION *session = rbverse_get_session( self );
+	const char *msg;
+
+	SafeStringValue( message );
+	msg = RSTRING_PTR( message );
+
+	verse_send_connect_terminate( session->address, msg );
+
+	return Qtrue;
+}
+
+
+
 
 /*
  * Verse::Session class
@@ -555,18 +586,15 @@ rbverse_init_verse_session( void ) {
 	rb_define_method( rbverse_cVerseSession, "on_connect_accept=",
 	                  rbverse_verse_session_on_connect_accept_eq, 1 );
 
-	// rb_define_method( rbverse_cVerseSession, "connect_terminate",
-	//                   rbverse_verse_session_connect_terminate, 2 );
-	// rb_define_method( rbverse_cVerseSession, "on_connect_terminate",
-	//                   rbverse_verse_session_on_connect_terminate, 0 );
-	// rb_define_method( rbverse_cVerseSession, "on_connect_terminate=",
-	//                   rbverse_verse_session_on_connect_terminate_eq, 1 );
+	rb_define_method( rbverse_cVerseSession, "connect_terminate",
+	                  rbverse_verse_session_connect_terminate, 1 );
 
 	// node_index_subscribe(uint32 mask);
 	// node_create(VNodeID node_id, VNodeType type, VNodeOwner owner);
 	// node_destroy(VNodeID node_id);
 	// node_subscribe(VNodeID node_id);
 	// node_unsubscribe(VNodeID node_id);
+
 	// tag_group_create(VNodeID node_id, uint16 group_id, const char *name);
 	// tag_group_destroy(VNodeID node_id, uint16 group_id);
 	// tag_group_subscribe(VNodeID node_id, uint16 group_id);
@@ -574,12 +602,10 @@ rbverse_init_verse_session( void ) {
 	// tag_create(VNodeID node_id, uint16 group_id, uint16 tag_id, const char *name, VNTagType type, 
 	//     const VNTag *tag);
 	// tag_destroy(VNodeID node_id, uint16 group_id, uint16 tag_id);
+
 	// node_name_set(VNodeID node_id, const char *name);
 
-	sym_connect_accept              = ID2SYM( rb_intern("connect_accept") );
-	sym_connect_terminate           = ID2SYM( rb_intern("connect_terminate") );
-	sym_ping                        = ID2SYM( rb_intern("ping") );
-	sym_node_index_subscribe        = ID2SYM( rb_intern("node_index_subscribe") );
+	// sym_connect_accept              = ID2SYM( rb_intern("connect_accept") );
 
 	// sym_node_create                 = ID2SYM( rb_intern("node_create") );
 	// sym_node_destroy                = ID2SYM( rb_intern("node_destroy") );

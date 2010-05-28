@@ -62,8 +62,3 @@ while $running
 end
 puts "Shutting down."
 
-sessions.each do |session|
-	puts "  terminating session: %p" % [ session[:address] ]
-	Verse.connect_terminate( session[:address], "server is going away" )
-end
-

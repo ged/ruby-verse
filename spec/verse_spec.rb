@@ -64,13 +64,6 @@ describe Verse do
 		Verse.library_version.should =~ /^r(\d+)p(\d+).*/i
 	end
 
-	describe "global callbacks" do
-		it "can set a handler for 'connect' events" do
-			handler = lambda {|*args| }
-			Verse.on_connect( &handler )
-			Verse.on_connect.should == handler
-		end
-	end
 
 	describe "ping functions" do
 

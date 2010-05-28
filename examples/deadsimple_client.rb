@@ -28,10 +28,6 @@ session.on_connect_accept do |avatar|
 	puts "connected."
 	my_avatar = avatar
 end
-session.on_connect_terminate do |address, message|
-	puts "#{address} terminated connection: #{message}"
-	running = false
-end
 
 signal_handler = lambda { running = false }
 Signal.trap( 'INT', &signal_handler )

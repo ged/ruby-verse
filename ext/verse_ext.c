@@ -225,37 +225,6 @@ rbverse_verse_connect_accept( VALUE module, VALUE avatar, VALUE address, VALUE h
 }
 
 
-/* 
- * call-seq: 
- *    Verse.connect_terminate( address, message )
- * 
- * Sent by a client that wishes to disconnect from a host, before
- * actually going ahead and severing the connection. This gives the
- * host a chance to gracefully free any resources dedicated to this
- * client, rather than having to find out after the fact that it has
- * disconnected.
- * 
- * This command needs to be sent even when there is no established
- * connection, so it also requires the address of the machine to send
- * it to. This information is implementation/API-level though, it does
- * not appear in the command's network representation.
- * 
- */
-static VALUE
-rbverse_verse_connect_terminate( VALUE module, VALUE address, VALUE message ) {
-	const char *addr, *msg;
-
-	SafeStringValue( address );
-	addr = RSTRING_PTR( address );
-	SafeStringValue( message );
-	msg = RSTRING_PTR( message );
-
-	verse_send_connect_terminate( addr, msg );
-
-	return Qtrue;
-}
-
-
 
 /* ----------------------------------- *
  *  Callback handlers
@@ -596,6 +565,10 @@ void
 Init_verse_ext( void ) {
 	rbverse_mVerse = rb_define_module( "Verse" );
 
+	sym_ping                        = ID2SYM( rb_intern("ping") );
+	sym_connect_terminate           = ID2SYM( rb_intern("connect_terminate") );
+	sym_node_index_subscribe        = ID2SYM( rb_intern("node_index_subscribe") );
+
 	rbverse_eVerseConnectError =
 		rb_define_class_under( rbverse_mVerse, "ConnectError", rb_eRuntimeError );
 	rbverse_eVerseSessionError =
@@ -617,24 +590,24 @@ Init_verse_ext( void ) {
 	rb_define_singleton_method( rbverse_mVerse, "port=", rbverse_verse_port_eq, 1 );
 	rb_define_alias( rb_singleton_class(rbverse_mVerse), "connect_port=", "port=" );
 
-	rb_define_singleton_method( rbverse_mVerse, "ping", rbverse_verse_ping, 2 );
+	rb_define_singleton_method( rbverse_mVerse, "create_host_id", rbverse_verse_create_host_id, 0 );
+	rb_define_singleton_method( rbverse_mVerse, "host_id=", rbverse_verse_host_id_eq, 1 );
+
 	rb_define_singleton_method( rbverse_mVerse, "connect_accept",
 		rbverse_verse_connect_accept, 3 );
-	rb_define_singleton_method( rbverse_mVerse, "connect_terminate",
-		rbverse_verse_connect_terminate, 2 );
 
+	rb_define_singleton_method( rbverse_mVerse, "ping", rbverse_verse_ping, 2 );
 	rb_define_singleton_method( rbverse_mVerse, "on_ping", rbverse_verse_on_ping, -1 );
 	rb_define_singleton_method( rbverse_mVerse, "on_ping=", rbverse_verse_on_ping_eq, 1 );
+
 	rb_define_singleton_method( rbverse_mVerse, "on_connect", rbverse_verse_on_connect, -1 );
 	rb_define_singleton_method( rbverse_mVerse, "on_connect=", rbverse_verse_on_connect_eq, 1 );
+
 	rb_define_singleton_method( rbverse_mVerse, "on_connect_terminate",
 		rbverse_verse_on_connect_terminate, -1 );
 
 	rb_define_singleton_method( rbverse_mVerse, "callback_update",
 		rbverse_verse_callback_update, 1 );
-
-	rb_define_singleton_method( rbverse_mVerse, "create_host_id", rbverse_verse_create_host_id, 0 );
-	rb_define_singleton_method( rbverse_mVerse, "host_id=", rbverse_verse_host_id_eq, 1 );
 
 	/*
 	 * Constants
@@ -646,6 +619,7 @@ Init_verse_ext( void ) {
 
 	/* Init the subordinate classes */
 	rbverse_init_verse_session();
+	rbverse_init_verse_node();
 
 	rbverse_log( "debug", "Initialized the extension." );
 	rb_require( "verse" );

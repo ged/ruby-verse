@@ -76,7 +76,7 @@ elsif VERSION_FILE.exist?
 	PKG_VERSION = VERSION_FILE.read[ /VERSION\s*=\s*['"](\d+\.\d+\.\d+)['"]/, 1 ]
 end
 
-PKG_VERSION ||= '0.0.0'
+PKG_VERSION = '0.0.0' unless defined?( PKG_VERSION )
 
 PKG_FILE_NAME = "#{PKG_NAME.downcase}-#{PKG_VERSION}"
 GEM_FILE_NAME = "#{PKG_FILE_NAME}.gem"

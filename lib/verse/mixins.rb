@@ -13,7 +13,7 @@ require 'verse'
 
 module Verse
 
-	# Add logging to a Verse class. Including classes get #log and #log_debug methods.
+	### Add logging to a Verse class. Including classes get #log and #log_debug methods.
 	module Loggable
 
 		LEVEL = {
@@ -59,7 +59,7 @@ module Verse
 	end # module Loggable
 
 
-	# A collection of functions for manipulating and comparing versions.
+	### A collection of functions for manipulating and comparing versions.
 	module VersionUtilities
 
 		###############
@@ -73,6 +73,65 @@ module Verse
 		end
 
 	end # module VersionUtilities
+
+
+	### A mixin for adding data and structure versioning.
+	module Versioned
+
+		### Set up versioning data
+		def initialize( *args )
+			@data_version      = 0
+			@structure_version = 0
+		end
+
+
+		######
+		public
+		######
+
+	 	# The current version of the internal state. This value is updated for any 
+		# kind of change.
+		attr_reader :data_version
+
+		# The current version of the internal structure. This value is only updated 
+		# when the internal structure changes.
+		attr_reader :structure_version
+
+
+		### Update the version for the internal state.
+		def update_data_version
+			@data_version += 1
+		end
+
+
+		### Update both the version for both the internal state and the structure.
+		def update_structure_version
+			self.update_data_version
+			@structure_version += 1
+		end
+
+
+		#########
+		protected
+		#########
+
+		### Return a fragment of an object's #inspect output for inclusion in objects 
+		### that include this mixin.
+		def inspect_fragment
+			return "version: %d.%d" % [
+				self.structure_version,
+				self.data_version
+			]
+		end
+
+	end # module Versioned
+
+
+	### A mixin for adding the ability to observe 
+	module Observable
+		
+		
+	end
 
 end # module Verse
 

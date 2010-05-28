@@ -11,5 +11,6 @@ class Verse::Session
 		self.class.synchronize { Verse.callback_update(timeout) }
 	end
 
+
 end # class Verse::Session
 

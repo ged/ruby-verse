@@ -24,6 +24,7 @@ extern VALUE rbverse_mVerse;
 extern VALUE rbverse_mVerseConstants;
 
 extern VALUE rbverse_cVerseSession;
+extern VALUE rbverse_cVerseNode;
 
 extern VALUE rbverse_eVerseConnectError;
 extern VALUE rbverse_eVerseSessionError;
@@ -47,6 +48,10 @@ typedef struct rbverse_connect_accept_event {
 	const char	    *address;
 	uint8		    *hostid;
 } rbverse_CONNECT_ACCEPT_EVENT;
+
+typedef struct rbverse_node {
+	
+} rbverse_NODE;
 
 /* --------------------------------------------------------------
  * Macros
