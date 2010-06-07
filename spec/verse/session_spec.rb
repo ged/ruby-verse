@@ -46,6 +46,7 @@ describe Verse::Session do
 	end
 
 	it "can acquire the session mutex for the null session" do
+		pending "conversion to the Observer-based API"
 		current_session = nil
 		Verse::Session.synchronize { current_session = Verse::Session.current }
 		current_session.should == nil
@@ -61,6 +62,7 @@ describe Verse::Session do
 		end
 
 		it "can register a callback for `connect_accept' events" do
+			pending "conversion to the Observer-based API"
 			session = nil
 
 			Verse.on_connect do |name, pass, address, exp_hostid|

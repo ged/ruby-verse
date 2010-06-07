@@ -11,31 +11,39 @@ BEGIN {
 
 require 'verse'
 require 'logger'
-require 'pathname'
-
-HOST_ID_FILE = Pathname( "hostkey.rsa" )
-PORT = 4555
 
 Verse.logger.level = Logger::DEBUG
 
-session = Verse::Session.new( "localhost:#{PORT}" )
-my_avatar = nil
-running = false
+class Client
+	include Verse::SessionObserver
 
-print "Connecting..."
-session.connect( 'user', 'pass' )
-session.on_connect_accept do |avatar|
-	puts "connected."
-	my_avatar = avatar
-end
+	PORT = 4555
 
-signal_handler = lambda { running = false }
-Signal.trap( 'INT', &signal_handler )
-Signal.trap( 'TERM', &signal_handler )
+	def initialize
+		@session = Verse::Session.new( "localhost:#{PORT}" )
+		@my_avatar = nil
+		@running = false
+	end
 
-running = true
-while running
-	session.callback_update( 1 )
-end
-puts "Disconnected."
+	def start
+		puts "Connecting..."
+		@session.connect( 'user', 'pass' )
+		@running = true
+		Verse.update while @running
+		puts "Disconnected."
+	end
+
+	def shutdown( *args )
+		puts "Shutting down..."
+		@running = false
+	end
+
+	def on_connect_accept( avatar )
+		puts "connected."
+		@my_avatar = avatar
+	end
+
+end # class Client
+
+Client.new.start
 

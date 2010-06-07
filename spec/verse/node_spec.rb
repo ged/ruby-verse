@@ -35,6 +35,7 @@ describe Verse::Node do
 
 
 	it "is an abstract class" do
+		pending "conversion to the Observer-based API"
 		expect { Verse::Node.new }.to raise_exception( NoMethodError, /undefined method/ )
 	end
 
@@ -47,11 +48,13 @@ describe Verse::Node do
 		end
 
 		it "can be created" do
+			pending "conversion to the Observer-based API"
 			@session.should_receive( :create_node ).with( @nodeclass ).and_yield( :the_new_node )
 			@node = @nodeclass.new( @session )
 		end
 
 		it "can be created with a callback that is called when creation succeeds" do
+			pending "conversion to the Observer-based API"
 			@session.should_receive( :create_node ).with( @nodeclass ).and_yield( :the_new_node )
 			@nodeclass.new( @session ) do |node|
 				result = node

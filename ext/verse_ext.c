@@ -42,13 +42,15 @@
 VALUE rbverse_mVerse;
 VALUE rbverse_mVerseConstants;
 
+VALUE rbverse_mVerseVersioned;
+VALUE rbverse_mVerseObserver;
+VALUE rbverse_mVersePingObserver;
+VALUE rbverse_mVerseConnectionObserver;
+VALUE rbverse_mVerseObservable;
+
 VALUE rbverse_eVerseConnectError;
 VALUE rbverse_eVerseSessionError;
 
-/* The global 'ping' and 'connect' callback Procs */
-static VALUE rbverse_ping_callback_proc;
-static VALUE rbverse_connect_callback_proc;
-static VALUE rbverse_connect_terminate_callback_proc;
 
 
 /*
@@ -112,11 +114,11 @@ rbverse_str2host_id( VALUE idstring ) {
 		rb_raise( rb_eArgError, "invalid encoding: expected ASCII-8BIT data" );
 
 	if ( RSTRING_LEN(idstring) > V_HOST_ID_SIZE ) {
-		rb_raise( rb_eArgError, 
+		rb_raise( rb_eArgError,
 		          "hostid is too long: should be %d bytes, got %ld", 
 		          V_HOST_ID_SIZE, RSTRING_LEN(idstring) );
 	} else if ( RSTRING_LEN(idstring) < V_HOST_ID_SIZE ) {
-		rb_raise( rb_eArgError, 
+		rb_raise( rb_eArgError,
 		          "hostid is too short: should be %d bytes, got %ld", 
 		          V_HOST_ID_SIZE, RSTRING_LEN(idstring) );
 	}
@@ -190,7 +192,7 @@ rbverse_verse_ping( VALUE module, VALUE address, VALUE message ) {
 	const char *addr = RSTRING_PTR( address );
 	const char *msg  = RSTRING_PTR( message );
 
-	rbverse_log( "debug", "Pinging '%s' with message '%s'", addr, msg );
+	rbverse_log_with_context( module, "debug", "Pinging '%s' with message '%s'", addr, msg );
 	verse_send_ping( addr, msg );
 
 	return Qtrue;
@@ -225,261 +227,9 @@ rbverse_verse_connect_accept( VALUE module, VALUE avatar, VALUE address, VALUE h
 }
 
 
-
-/* ----------------------------------- *
- *  Callback handlers
- * ----------------------------------- */
-
-/*
- * Call the ping handler after aqcuiring the GVL.
- */
-static void *
-rbverse_cb_ping_body( void *ptr ) {
-	const char **args = (const char **)ptr;
-	VALUE address, msg;
-
-	address = rb_str_new2( args[0] );
-	msg = rb_str_new2( args[1] );
-
-	if ( rbverse_ping_callback_proc && RTEST(rbverse_ping_callback_proc) ) {
-		rbverse_log( "debug", "Handling ping with callback: %s",
-			RSTRING_PTR(rb_inspect( rbverse_ping_callback_proc )) );
-		rb_funcall( rbverse_ping_callback_proc, rb_intern("call"), 2, address, msg );
-	} else {
-		rbverse_log( "info", "ping event received with no handler set!" );
-	}
-
-	return NULL;
-}
-
-/*
- * Callback for the 'ping' command.
- */
-static void
-rbverse_cb_ping( void *unused, const char *addr, const char *msg ) {
-	const char *(args[2]) = { addr, msg };
-	rb_thread_call_with_gvl( rbverse_cb_ping_body, args );
-}
-
-
-/*
- * call-seq:
- *     Verse.on_ping( &block )
- *
- * Register a callback for 'ping' events.
- *
- */
-static VALUE
-rbverse_verse_on_ping( int argc, VALUE *argv, VALUE module ) {
-	if ( rb_block_given_p() ) {
-		VALUE block = rb_block_proc();
-
-		rbverse_log( "debug", "Setting ping callback to: %s", RSTRING_PTR(rb_inspect( block )) );
-		rbverse_ping_callback_proc = block;
-
-		verse_callback_set( verse_send_ping, rbverse_cb_ping, NULL );
-		return Qnil;
-	} else {
-		return rbverse_ping_callback_proc;
-	}
-}
-
-
-/*
- *  call-seq:
- *     Verse.on_ping = proc
- *
- * Set the callback for 'ping' events.
- */
-static VALUE
-rbverse_verse_on_ping_eq( VALUE module, VALUE block ) {
-	rbverse_log( "debug", "Setting ping callback to: %s", RSTRING_PTR(rb_inspect( block )) );
-	rbverse_ping_callback_proc = block;
-
-	verse_callback_set( verse_send_ping, rbverse_cb_ping, NULL );
-
-	return block;
-}
-
-
-/*
- * Call the connect handler after aqcuiring the GVL.
- */
-static void *
-rbverse_cb_connect_body( void *ptr ) {
-	const char **args = (const char **)ptr;
-	VALUE name, pass, address, hostid;
-
-	name    = rb_str_new2( args[0] );
-	pass    = rb_str_new2( args[1] );
-	address = rb_str_new2( args[2] );
-	hostid  = rbverse_host_id2str( (const uint8 *)args[3] );
-
-	if ( rbverse_connect_callback_proc && RTEST(rbverse_connect_callback_proc) ) {
-		rbverse_log( "debug", "Handling connect with callback: %s",
-			RSTRING_PTR(rb_inspect( rbverse_connect_callback_proc )) );
-		rb_funcall( rbverse_connect_callback_proc, rb_intern("call"), 4, name, pass, address, hostid );
-	} else {
-		rbverse_log( "info", "connect event received with no handler set!" );
-	}
-
-	return NULL;
-}
-
-/*
- * Callback for the 'connect' command.
- */
-static void
-rbverse_cb_connect( void *unused, const char *name, const char *pass, const char *address,
-                        const uint8 *expected_host_id )
-{
-	const char *(args[4]) = { name, pass, address, (const char *)expected_host_id };
-	printf( " Acquiring GVL for 'connect' event.\n" );
-	fflush( stdout );
-	rb_thread_call_with_gvl( rbverse_cb_connect_body, args );
-}
-
-
-/*
- * call-seq:
- *    Verse.on_connect {|name, pass, address, expected_host_id| ... }   -> nil
- *    Verse.on_connect                                                  -> proc
- * 
- * Register a callback to handle 'connect' events, or return the current 
- * callback if no block is given.
- * 
- * @example
- *    sessions = {}
- *    Verse.on_connect do |name, pass, address, hostid|
- *        Verse.connect_terminate( address, "wrong hostid" ) unless
- *            hostid == my_hostid
- *        Verse.connect_terminate( address, "auth failed" ) unless 
- *            authenticate( user, pass )
- *        avatar = Verse::ObjectNode.new
- *        session = Verse.connect_accept( avatar, address, my_hostid )
- *        sessions[ address ] = { :avatar => avatar, :session => session }
- *    end
- *    
- *    Verse.on_connect
- *    # => 
- * 
- * @see Verse.on_connect=
- */
-static VALUE
-rbverse_verse_on_connect( int argc, VALUE *argv, VALUE module ) {
-	if ( rb_block_given_p() ) {
-		VALUE block = rb_block_proc();
-		rbverse_log( "debug", "Setting 'connect' callback to: %s", RSTRING_PTR(rb_inspect( block )) );
-		rbverse_connect_callback_proc = block;
-
-		verse_callback_set( verse_send_connect, rbverse_cb_connect, NULL );
-		return Qnil;
-	} else {
-		return rbverse_connect_callback_proc;
-	}
-}
-
-
-/*
- * call-seq:
- *    Verse.on_connect = proc
- * 
- * Register a callback to handle 'connect' events.
- * 
- * @see Verse.on_connect
- */
-static VALUE
-rbverse_verse_on_connect_eq( VALUE module, VALUE block ) {
-	rbverse_log( "debug", "Setting 'connect' callback to: %s", RSTRING_PTR(rb_inspect( block )) );
-	rbverse_connect_callback_proc = block;
-	return block;
-}
-
-
-/*
- * Call the connect_terminate handler after aqcuiring the GVL.
- */
-static void *
-rbverse_cb_connect_terminate_body( void *ptr ) {
-	const char **args = (const char **)ptr;
-	VALUE address, message;
-
-	address = rb_str_new2( args[0] );
-	message = rb_str_new2( args[1] );
-
-	if ( rbverse_connect_terminate_callback_proc && RTEST(rbverse_connect_terminate_callback_proc) ) {
-		rbverse_log( "debug", "Handling connect_terminate with callback: %s",
-			rb_inspect(rbverse_connect_terminate_callback_proc) );
-		rb_funcall( rbverse_connect_terminate_callback_proc, rb_intern("call"), 2, address, message );
-	} else {
-		rbverse_log( "info", "connect_terminate event received with no handler set!" );
-	}
-
-	return NULL;
-}
-
-/*
- * Callback for the 'connect_terminate' command.
- */
-static void
-rbverse_cb_connect_terminate( void *unused, const char *address, const char *message ) {
-	const char *(args[2]) = { address, message };
-	printf( " Acquiring GVL for 'connect_terminate' event." );
-	rb_thread_call_with_gvl( rbverse_cb_connect_terminate_body, args );
-}
-
-
-/*
- * call-seq:
- *     Verse.on_connect_terminate {|address, message| ... }
- *
- * Register a callback to handle `connect_terminate' events.
- * 
- *    Verse.on_connect_terminate do |address, message|
- *        conn = sessions.delete( address )
- *        conn[:avatar].destroy
- *    end
- */
-static VALUE
-rbverse_verse_on_connect_terminate( int argc, VALUE *argv, VALUE module ) {
-	if ( rb_block_given_p() ) {
-		VALUE block = rb_block_proc();
-
-		rbverse_log( "debug", "Setting 'connect_terminate' callback to: %s", 
-		             RSTRING_PTR(rb_inspect( block )) );
-		rbverse_connect_terminate_callback_proc = block;
-
-		verse_callback_set( verse_send_connect_terminate, rbverse_cb_connect_terminate, NULL );
-
-		return Qnil;
-	} else {
-		return rbverse_connect_terminate_callback_proc;
-	}
-}
-
-
-/*
- * call-seq:
- *    Verse.on_connect_terminate = proc
- * 
- * Set the callback that handles connect_terminate messages to +proc+.
- * 
- */
-static VALUE
-rbverse_verse_on_connect_terminate_eq( VALUE module, VALUE block ) {
-	rbverse_log( "debug", "Setting 'connect_terminate' callback to: %s",
-	             RSTRING_PTR(rb_inspect( block )) );
-	rbverse_connect_terminate_callback_proc = block;
-
-	verse_callback_set( verse_send_connect_terminate, rbverse_cb_connect_terminate, NULL );
-
-	return Qnil;
-}
-
-
 /* Body of rbverse_verse_callback_update after GVL is given up. */
 static VALUE
-rbverse_verse_callback_update_body( void *ptr ) {
+rbverse_verse_update_body( void *ptr ) {
 	uint32 *microseconds = (uint32 *)ptr;
 
 	verse_callback_update( *microseconds );
@@ -490,7 +240,7 @@ rbverse_verse_callback_update_body( void *ptr ) {
 
 /*
  * call-seq:
- *     Verse.callback_update( timeout )
+ *     Verse.update( timeout=0.1 )
  * 
  * Reads any incoming packets from the network, parses them (splits
  * them into commands) and issues calls to any callbacks that are
@@ -513,13 +263,13 @@ rbverse_verse_callback_update_body( void *ptr ) {
  *                         block waiting for updates
  */
 static VALUE
-rbverse_verse_callback_update( VALUE module, VALUE timeout ) {
+rbverse_verse_update( VALUE module, VALUE timeout ) {
 	double seconds = NUM2DBL( timeout );
 	uint32 microseconds = floor( seconds * 1000000 );
 
 	rbverse_log( "debug", "Callback update for session %p (timeout=%u µs).",
 	             verse_session_get(), microseconds );
-	rb_thread_blocking_region( rbverse_verse_callback_update_body, &microseconds,
+	rb_thread_blocking_region( rbverse_verse_update_body, &microseconds,
 		RUBY_UBF_IO, NULL );
 
 	return Qtrue;
@@ -557,29 +307,164 @@ rbverse_verse_host_id_eq( VALUE module, VALUE id ) {
 }
 
 
+/* --------------------------------------------------------------
+ * Observable Support
+ * -------------------------------------------------------------- */
+
+/*
+ * Iterator for ping callback.
+ */
+static VALUE
+rbverse_cb_ping_i( VALUE observer, VALUE cb_args ) {
+	if ( !rb_obj_is_kind_of(observer, rbverse_mVersePingObserver) )
+		return Qnil;
+
+	rbverse_log( "debug", "Ping callback: notifying observer: %s.", 
+	             RSTRING_PTR(rb_inspect( observer )) );
+	return rb_funcall2( observer, rb_intern("on_ping"), 2, RARRAY_PTR(cb_args) );
+}
+
+
+/*
+ * Call the ping handler after aqcuiring the GVL.
+ */
+static void *
+rbverse_cb_ping_body( void *ptr ) {
+	const char **args = (const char **)ptr;
+	const VALUE cb_args = rb_ary_new2( 2 );
+	const VALUE observers = rb_iv_get( rbverse_mVerse, "@observers" );
+
+	RARRAY_PTR(cb_args)[0] = rb_str_new2( args[0] );
+	RARRAY_PTR(cb_args)[1] = rb_str_new2( args[1] );
+
+	rb_block_call( observers, rb_intern("each"), 0, 0, rbverse_cb_ping_i, cb_args );
+
+	return NULL;
+}
+
+
+/*
+ * Callback for the 'ping' command.
+ */
+static void
+rbverse_cb_ping( void *unused, const char *addr, const char *msg ) {
+	const char *(args[2]) = { addr, msg };
+	rb_thread_call_with_gvl( rbverse_cb_ping_body, args );
+}
+
+
+/*
+ * Iterator for connect callback.
+ */
+static VALUE
+rbverse_cb_connect_i( VALUE observer, VALUE cb_args ) {
+	if ( !rb_obj_is_kind_of(observer, rbverse_mVerseConnectionObserver) )
+		return Qnil;
+
+	rbverse_log( "debug", "Connect callback: notifying observer: %s.", 
+	             RSTRING_PTR(rb_inspect( observer )) );
+	return rb_funcall2( observer, rb_intern("on_connect"), 4, RARRAY_PTR(cb_args) );
+}
+
+
+/*
+ * Call the connect handler after aqcuiring the GVL.
+ */
+static void *
+rbverse_cb_connect_body( void *ptr ) {
+	const char **args = (const char **)ptr;
+	const VALUE cb_args = rb_ary_new2( 4 );
+	const VALUE observers = rb_iv_get( rbverse_mVerse, "@observers" );
+
+	RARRAY_PTR(cb_args)[0] = rb_str_new2( args[0] );
+	RARRAY_PTR(cb_args)[1] = rb_str_new2( args[1] );
+	RARRAY_PTR(cb_args)[2] = rb_str_new2( args[2] );
+	RARRAY_PTR(cb_args)[3] = rbverse_host_id2str( (const uint8 *)args[3] );
+
+	rb_block_call( observers, rb_intern("each"), 0, 0, rbverse_cb_connect_i, cb_args );
+
+	return NULL;
+}
+
+/*
+ * Callback for the 'connect' command.
+ */
+static void
+rbverse_cb_connect( void *unused, const char *name, const char *pass, const char *address,
+                        const uint8 *expected_host_id )
+{
+	const char *(args[4]) = { name, pass, address, (const char *)expected_host_id };
+	printf( " Acquiring GVL for 'connect' event.\n" );
+	fflush( stdout );
+	rb_thread_call_with_gvl( rbverse_cb_connect_body, args );
+}
+
+
+/*
+ * call-seq:
+ *    Verse.add_observer( observer )
+ *
+ * @see Verse::Observable#add_observer
+ *
+ */
+static VALUE
+rbverse_verse_add_observer( VALUE module, VALUE observer ) {
+	rbverse_log( "debug", "Adding observer %s.", RSTRING_PTR(rb_inspect( observer )) );
+
+	/* Register callbacks when an observer is added; I don't think re-registering
+	   them on observers after the first has any negative consequences...
+	 */
+	verse_callback_set( verse_send_ping, rbverse_cb_ping, NULL );
+	verse_callback_set( verse_send_connect, rbverse_cb_connect, NULL );
+
+	return rb_call_super( 1, &observer );
+}
+
+
+/*
+ * call-seq:
+ *    Verse.remove_observer( observer )
+ *
+ * @see Verse::Observable#remove_observer
+ *
+ */
+static VALUE
+rbverse_verse_remove_observer( VALUE module, VALUE observer ) {
+	VALUE rval = Qnil;
+
+	rbverse_log( "debug", "Removing observer %s.", RSTRING_PTR(rb_inspect( observer )) );
+	rval = rb_call_super( 1, &observer );
+
+	/* Unregister callbacks if the last observer has been removed */
+	if ( !RARRAY_LEN(rb_iv_get( rbverse_mVerse, "@observers" )) ) {
+		verse_callback_set( verse_send_ping, NULL, NULL );
+		verse_callback_set( verse_send_connect, NULL, NULL );
+	}
+
+	return rval;
+}
+
+
+
 /*
  * Verse namespace.
  * 
  */
 void
 Init_verse_ext( void ) {
-	rbverse_mVerse = rb_define_module( "Verse" );
+	rb_require( "verse" );
 
-	sym_ping                        = ID2SYM( rb_intern("ping") );
-	sym_connect_terminate           = ID2SYM( rb_intern("connect_terminate") );
-	sym_node_index_subscribe        = ID2SYM( rb_intern("node_index_subscribe") );
+	rbverse_mVerse = rb_define_module( "Verse" );
+	rbverse_mVerseVersioned = rb_define_module_under( rbverse_mVerse, "Versioned" );
+	rbverse_mVerseObserver = rb_define_module_under( rbverse_mVerse, "Observer" );
+	rbverse_mVersePingObserver = rb_define_module_under( rbverse_mVerse, "PingObserver" );
+	rbverse_mVerseConnectionObserver = rb_define_module_under( rbverse_mVerse, "ConnectionObserver" );
+	rbverse_mVerseObservable = rb_define_module_under( rbverse_mVerse, "Observable" );
 
 	rbverse_eVerseConnectError =
 		rb_define_class_under( rbverse_mVerse, "ConnectError", rb_eRuntimeError );
 	rbverse_eVerseSessionError =
 		rb_define_class_under( rbverse_mVerse, "SessionError", rb_eRuntimeError );
-
-	rb_global_variable( &rbverse_ping_callback_proc );
-	rbverse_ping_callback_proc = Qnil;
-	rb_global_variable( &rbverse_connect_callback_proc );
-	rbverse_connect_callback_proc = Qnil;
-	rb_global_variable( &rbverse_connect_terminate_callback_proc );
-	rbverse_connect_terminate_callback_proc = Qnil;
 
 	/* version constants */
 	rb_define_const( rbverse_mVerse, "RELEASE_NUMBER", INT2FIX(V_RELEASE_NUMBER) );
@@ -589,25 +474,14 @@ Init_verse_ext( void ) {
 	/* Module methods */
 	rb_define_singleton_method( rbverse_mVerse, "port=", rbverse_verse_port_eq, 1 );
 	rb_define_alias( rb_singleton_class(rbverse_mVerse), "connect_port=", "port=" );
-
 	rb_define_singleton_method( rbverse_mVerse, "create_host_id", rbverse_verse_create_host_id, 0 );
 	rb_define_singleton_method( rbverse_mVerse, "host_id=", rbverse_verse_host_id_eq, 1 );
-
-	rb_define_singleton_method( rbverse_mVerse, "connect_accept",
-		rbverse_verse_connect_accept, 3 );
-
+	rb_define_singleton_method( rbverse_mVerse, "connect_accept", rbverse_verse_connect_accept, 3 );
 	rb_define_singleton_method( rbverse_mVerse, "ping", rbverse_verse_ping, 2 );
-	rb_define_singleton_method( rbverse_mVerse, "on_ping", rbverse_verse_on_ping, -1 );
-	rb_define_singleton_method( rbverse_mVerse, "on_ping=", rbverse_verse_on_ping_eq, 1 );
-
-	rb_define_singleton_method( rbverse_mVerse, "on_connect", rbverse_verse_on_connect, -1 );
-	rb_define_singleton_method( rbverse_mVerse, "on_connect=", rbverse_verse_on_connect_eq, 1 );
-
-	rb_define_singleton_method( rbverse_mVerse, "on_connect_terminate",
-		rbverse_verse_on_connect_terminate, -1 );
-
-	rb_define_singleton_method( rbverse_mVerse, "callback_update",
-		rbverse_verse_callback_update, 1 );
+	rb_define_singleton_method( rbverse_mVerse, "update", rbverse_verse_update, 1 );
+	rb_define_alias( rb_singleton_class(rbverse_mVerse), "callback_update", "update" );
+	rb_define_singleton_method( rbverse_mVerse, "add_observer", rbverse_verse_add_observer, 1 );
+	rb_define_singleton_method( rbverse_mVerse, "remove_observer", rbverse_verse_remove_observer, 1 );
 
 	/*
 	 * Constants
@@ -621,7 +495,8 @@ Init_verse_ext( void ) {
 	rbverse_init_verse_session();
 	rbverse_init_verse_node();
 
+	rbverse_init_verse_mixins();
+
 	rbverse_log( "debug", "Initialized the extension." );
-	rb_require( "verse" );
 }
 

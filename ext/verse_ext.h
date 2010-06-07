@@ -1,3 +1,8 @@
+/*
+ * Ruby Verse extension header
+ * $Id$
+ */
+
 #ifndef __VERSE_EXT_H__
 #define __VERSE_EXT_H__
 
@@ -9,8 +14,12 @@
 #include <verse.h>
 
 #include "ruby.h"
-#include "ruby/intern.h"
-#include "ruby/encoding.h"
+#ifndef RUBY_VM
+#	error Ruby-Verse requires at least Ruby 1.9.1
+#else
+#	include "ruby/intern.h"
+#	include "ruby/encoding.h"
+#endif /* !RUBY_VM */
 
 /* Missing declarations of "experimental" thread functions from ruby/thread.c */
 void * rb_thread_call_with_gvl(void *(*)(void *), void *);
@@ -22,6 +31,12 @@ void * rb_thread_call_with_gvl(void *(*)(void *), void *);
 
 extern VALUE rbverse_mVerse;
 extern VALUE rbverse_mVerseConstants;
+
+extern VALUE rbverse_mVerseVersioned;
+extern VALUE rbverse_mVerseObserver;
+extern VALUE rbverse_mVerseObservable;
+extern VALUE rbverse_mVersePingObserver;
+extern VALUE rbverse_mVerseConnectionObserver;
 
 extern VALUE rbverse_cVerseSession;
 extern VALUE rbverse_cVerseNode;
@@ -50,13 +65,14 @@ typedef struct rbverse_connect_accept_event {
 } rbverse_CONNECT_ACCEPT_EVENT;
 
 typedef struct rbverse_node {
-	
+	VNodeID id;
 } rbverse_NODE;
 
 /* --------------------------------------------------------------
  * Macros
  * -------------------------------------------------------------- */
 #define IsSession( obj ) rb_obj_is_kind_of( (obj), rbverse_cVerseSession )
+#define IsNode( obj ) rb_obj_is_kind_of( (obj), rbverse_cVerseNode )
 
 #define DEFAULT_ADDRESS rb_str_new2( "127.0.0.1" );
 
@@ -89,6 +105,9 @@ extern VALUE rbverse_verse_session_from_vsession( VSession, VALUE );
 void Init_verse_ext( void );
 
 extern void rbverse_init_verse_session _(( void ));
+extern void rbverse_init_verse_node    _(( void ));
+
+extern void rbverse_init_verse_mixins  _(( void ));
 
 #endif /* __VERSE_EXT_H__ */
 

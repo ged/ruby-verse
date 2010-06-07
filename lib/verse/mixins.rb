@@ -127,11 +127,119 @@ module Verse
 	end # module Versioned
 
 
-	### A mixin for adding the ability to observe 
+	### A mixin for making Verse objects observable.
 	module Observable
-		
-		
+
+		### Set up observable data structures.
+		def initialize( *args )
+			@observers = []
+			super
+		end
+
+
+		######
+		public
+		######
+
+		### The object's observers
+		### @return [Array<Observer>]  the Array of observer.
+		attr_reader :observers
+
+
+		### Add an observer.
+		### 
+		### @param [Observable] observer  the object that is interested in events from
+		###                               the receiver.
+		def add_observer( observer )
+			@observers << observer
+		end
+
+
+		### Remove an observer.
+		### 
+		### @param [Observable] observer  the object that is no longer interested in events
+		###                               from the receiver.
+		def remove_observer( observer )
+			@observers.delete( observer )
+		end
+
+
+		### Remove all current observers.
+		### @returns [Array<Verse::Observer>]  the observers that were removed
+		def remove_observers
+			@observers.collect {|observer| self.remove_observer(observer) }
+		end
+
+	end # module Observable
+
+
+	### A mixin for making an object capable of observing one or more 
+	### Verse::Observable objects.
+	module Observer
+
+		### Start observing the specified +objects+.
+		### 
+		### @param [Array<Observable>] objects  The objects to observe.
+		def observe( *objects )
+			objects.each {|obj| obj.add_observer(self) }
+		end
+
+
+		### Remove the receiver from the list of interested observers from
+		### the given +objects+.
+		### 
+		### @params [Array<Observable>] objects the objects to no longer observe.
+		def stop_observing( *objects )
+			objects.each {|obj| obj.remove_observer(self) }
+		end
+
+	end # module Observer
+
+
+	### A mixin for objects which wish to handle 'ping' events.
+	module PingObserver
+		include Verse::Loggable,
+		        Verse::Observer
+
+		### Called when a ping is received from +address+.
+		###
+		### @param [String]  address  the address of the sender, in `<host>:<port>` form.
+		### @param [String]  message  the 'payload' of the ping message.
+		def on_ping( address, message )
+			self.log.debug "unhandled on_ping: got '%s' from '%s'" % [ message, address ]
+		end
+
+	end # PingObserver
+
+
+	### A mixin for objects which wish to handle 'connect' and 'connect_terminate' events.
+	module ConnectionObserver
+		include Verse::Loggable,
+		        Verse::Observer
+
+		### Called when a Verse client connects.
+		### 
+		### @param [String]  user     the username provided by the connecting client
+		### @param [String]  pass     the password provided by the connecting client
+		### @param [String]  address  the address of the connecting client
+		### @param [String]  hostid   the expected hostid provided by the connecting client
+		def on_connect( user, pass, address, hostid )
+			self.log.debug "unhandled on_connect: '%s' connected from '%s'" % [ user, address ]
+		end
+
+
+		### Called when a Verse client notifies the server that it wishes to terminate
+		### communication.
+		### 
+		### @param [String]  address  the address of the terminating client
+		### @param [String]  message  the termination message
+		def on_connect_terminate( address, message )
+			self.log.debug "unhandled on_connect_terminate: '%s' terminated communication: %s" % 
+				[ address, message ]
+		end
+
 	end
+
 
 end # module Verse
 

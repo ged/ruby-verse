@@ -25,7 +25,7 @@ Rake::ExtensionTask.new do |ext|
     ext.name = 'verse_ext'
     ext.gem_spec = GEMSPEC
     ext.ext_dir = 'ext'
-    ext.lib_dir = ARCHLIBDIR
+    ext.lib_dir = ARCHLIBDIR.to_s
 	ext.source_pattern = "*.{c,h}"
 	ext.cross_compile = true
 	ext.cross_platform = %w[i386-mswin32 i386-mingw32]

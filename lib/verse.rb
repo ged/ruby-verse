@@ -15,13 +15,16 @@ module Verse
 	require 'verse/mixins'
 	require 'verse/constants'
 
-	extend Verse::VersionUtilities
+	extend Verse::VersionUtilities,
+	       Verse::Observable
 
  	if vvec( RUBY_VERSION ) < vvec( '1.9.1' )
 		warn ">>> This library was written for Ruby 1.9.1. It may or may not work " +
 		     "with earlier versions. <<<"
 	end
 
+	### Observable
+	@observers = []
 
 	### Logging 
 	@default_logger = Logger.new( $stderr )

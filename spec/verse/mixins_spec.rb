@@ -68,15 +68,7 @@ describe Verse, "mixins" do
 	end
 
 
-	describe Verse::ConnectionObserver, "mixed into a class" do
-
-		it "" do
-			handler = lambda {|*args| }
-			Verse.on_connect( &handler )
-			Verse.on_connect.should == handler
-		end
-
-	end
+	describe Verse::ConnectionObserver, "mixed into a class"
 
 
 end

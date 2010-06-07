@@ -33,7 +33,7 @@ describe Verse do
 	include Verse::SpecHelpers
 
 	before( :all ) do
-		setup_logging( :debug )
+		setup_logging( :fatal )
 		@port = 45196;
 		Verse.port = @port
 	end
@@ -65,65 +65,69 @@ describe Verse do
 	end
 
 
-	describe "ping functions" do
+	it "doesn't block other threads when calling #update" do
+		updater = Thread.new do
+			Thread.current.abort_on_exception = true
+			Verse.update( 0.5 )
+		end
+
+		count = 0
+		count += 1 while updater.alive?
+
+		updater.join
+		count.should > 1
+	end
+
+
+	describe "ping messages" do
 
 		before( :each ) do
-			setup_logging( :debug )
-			Verse.on_ping = nil
+			setup_logging( :fatal )
 		end
 
-		it "can set a handler for 'ping' events via a block" do
-			Verse.on_ping.should be_nil()
-			Verse.on_ping {|*args|  }
-			Verse.on_ping.should be_a( Proc )
+		after( :each ) do
+			Verse.remove_observers
 		end
 
-		it "can set a handler for 'ping' events via a setter" do
-			Verse.on_ping.should be_nil()
-			handler = lambda {|*args| }
-			Verse.on_ping = handler
-			Verse.on_ping.should == handler
-		end
+		it "are sent to objects which are PingObservers" do
+			observer_class = Class.new do
+				include Verse::PingObserver
 
-		it "can ping a server and receive pings" do
-			message = nil
-			Verse.on_ping do |address, data|
-				Verse.log.debug "Ping received: %p: %p" % [ address, data ]
-				message = data
-			end
-
-			Verse.ping( "localhost:#@port", 'expected message' )
-			Verse.callback_update( 0.2 )
-			Verse.callback_update( 0.2 )
-
-			message.should == 'expected message'
-		end
-
-		it "doesn't block other threads when calling callback_update" do
-
-			callback_thread = Thread.new do
-				Thread.current.abort_on_exception
-				message = nil
-				count = 0
-
-				Verse.on_ping do |address, data|
-					Verse.log.debug "Ping received: %p: %p" % [ address, data ]
-					message = data
+				def on_ping( address, data )
+					@address = address
+					@data    = data
 				end
 
-				until message && message.index( 'done' )
-					count += 1
-					Verse.callback_update( 0.01 )
-				end
-
-				count
+				attr_reader :address, :data
 			end
 
-			sleep 0.1
-			Verse.ping( "localhost:#@port", "done" )
+			observer = observer_class.new
+			addr     = "127.0.0.1:#@port"
+			data     = 'expected message'
 
-			loops = callback_thread.value
-			loops.should > 1
+			Verse.add_observer( observer )
+			Verse.ping( addr, data )
+			Verse.update( 0.1 )
+			Verse.update( 0.1 )
+
+			observer.address.should == addr
+			observer.data.should == data
+		end
+
+		it "aren't sent to observers which aren't PingObservers" do
+			observer_class = Class.new do
+				include Verse::ConnectionObserver
+			end
+
+			observer = observer_class.new
+			addr     = "127.0.0.1:#@port"
+			data     = 'expected message'
+
+			observer.observe( Verse )
+			observer.should_not_receive( :on_ping )
+			Verse.ping( addr, data )
+			Verse.update( 0.1 )
+			Verse.update( 0.1 )
 		end
 
 	end

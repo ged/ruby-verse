@@ -43,7 +43,7 @@ VALUE rbverse_cVerseSession;
 
 static VALUE rbverse_session_mutex;
 
-static VALUE sym_connect_accept, sym_connect_terminate, sym_ping, sym_node_index_subscribe;
+static VALUE sym_connect_accept;
 
 	// sym_node_create, sym_node_destroy, sym_node_subscribe, sym_node_unsubscribe,
 	// sym_tag_group_create, sym_tag_group_destroy, sym_tag_group_subscribe,
@@ -518,7 +518,7 @@ rbverse_verse_session_on_connect_accept_eq( VALUE self, VALUE handler ) {
 
 /* 
  * call-seq: 
- *    Verse.connect_terminate( address, message )
+ *    session.terminate( address, message )
  * 
  * Sent by a client that wishes to disconnect from a host, before
  * actually going ahead and severing the connection. This gives the
@@ -533,14 +533,14 @@ rbverse_verse_session_on_connect_accept_eq( VALUE self, VALUE handler ) {
  * 
  */
 static VALUE
-rbverse_verse_connect_terminate( VALUE module, VALUE message ) {
+rbverse_verse_session_terminate( VALUE self, VALUE message ) {
 	rbverse_SESSION *session = rbverse_get_session( self );
 	const char *msg;
 
 	SafeStringValue( message );
 	msg = RSTRING_PTR( message );
 
-	verse_send_connect_terminate( session->address, msg );
+	verse_send_connect_terminate( RSTRING_PTR(session->address), msg );
 
 	return Qtrue;
 }
@@ -586,8 +586,7 @@ rbverse_init_verse_session( void ) {
 	rb_define_method( rbverse_cVerseSession, "on_connect_accept=",
 	                  rbverse_verse_session_on_connect_accept_eq, 1 );
 
-	rb_define_method( rbverse_cVerseSession, "connect_terminate",
-	                  rbverse_verse_session_connect_terminate, 1 );
+	rb_define_method( rbverse_cVerseSession, "terminate", rbverse_verse_session_terminate, 1 );
 
 	// node_index_subscribe(uint32 mask);
 	// node_create(VNodeID node_id, VNodeType type, VNodeOwner owner);

@@ -1,7 +1,8 @@
 #!/usr/bin/env ruby
 
 #
-# Rawk server, a Ruby port of the Tawk basic IRC-like chat for Verse.
+# Rawk server, a Ruby port of the Tawk basic IRC-like chat for 
+# Verse. *** UNFINISHED ***
 #
 VERSION = "0.1"
 

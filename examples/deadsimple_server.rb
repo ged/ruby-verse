@@ -36,29 +36,43 @@ else
 end
 Verse.host_id = my_hostid
 
-Verse.on_connect do |name, pass, address, hostid|
-    Verse.connect_terminate( address, "wrong hostid" ) unless
-        hostid == my_hostid
-    # Verse.connect_terminate( address, "auth failed" ) unless
-    #     authenticate( user, pass )
-    avatar = Verse::ObjectNode.new
-    session = Verse.connect_accept( avatar, address, my_hostid )
-    sessions[ address ] = { :avatar => avatar, :session => session }
-end
 
-Verse.on_connect_terminate do |address, message|
-	puts "#{address} terminated connection: #{message}"
-	session = sessions.delete( address )
-	session[:avatar].destroy
-end
+class Server
+	require 'digest/sha1'
+
+	include Verse::ConnectionObserver
+
+	USERS = { 'bargle' => 'a76282512cb523ec1f82c79b4f51e34cdd5f11ea' }
+
+	def initialize
+		@connections = {}
+	end
+
+	def on_connect( name, pass, address, hostid )
+	    Verse.connect_terminate( address, "wrong hostid" ) unless hostid == my_hostid
+		Verse.connect_terminate( address, "auth failed" ) unless self.authenticate( user, pass )
+	    avatar = Verse::ObjectNode.new
+	    session = Verse.connect_accept( avatar, address, my_hostid )
+	    @connections[ address ] = { :avatar => avatar, :session => session }
+	end
+
+	def authenticate( user, pass )
+		return USERS[ user ] == Digest::SHA1.hexdigest( pass )
+	end
+
+	def on_connect_terminate( address, message )
+		puts "#{address} terminated connection: #{message}"
+		conn = @connections.delete( address )
+		conn[:avatar].destroy
+	end
+
+end # class Server
 
 signal_handler = lambda {|signal| $running = false; Signal.trap(signal, 'IGN') }
 Signal.trap( 'INT', &signal_handler )
 
 puts "Listening on port #{PORT}"
 $running = true
-while $running
-	Verse.callback_update( 1 )
-end
+Verse.update while $running
 puts "Shutting down."
 
