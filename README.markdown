@@ -28,23 +28,23 @@ All classes and modules in Ruby-Verse are declared inside the _Verse_ module.
 * Session
 
 * Node
-** ObjectNode
-*** ObjectLink
-*** ObjectTransform
-*** ObjectMethod
-*** ObjectMethodGroup
-** GeometryNode
-*** GeometryBone
-*** GeometryLayer
-*** GeometryCrease
-** MaterialNode
-*** MaterialFragment
-** TextNode
-*** TextBuffer
-** BitmapNode
-*** BitmapLayer
-** CurveNode
-** AudioNode
+	- ObjectNode
+		* ObjectLink
+		* ObjectTransform
+		* ObjectMethod
+		* ObjectMethodGroup
+	- GeometryNode
+		* GeometryBone
+		* GeometryLayer
+		* GeometryCrease
+	- MaterialNode
+		* MaterialFragment
+	- TextNode
+		* TextBuffer
+	- BitmapNode
+		* BitmapLayer
+	- CurveNode
+	- AudioNode
 
 
 ### Observer Mixins
@@ -53,27 +53,25 @@ All classes and modules in Ruby-Verse are declared inside the _Verse_ module.
 * SessionObserver
 
 * NodeObserver
-** NodeTagObserver
-** NodeTagGroupObserver
+	- NodeTagObserver
+	- NodeTagGroupObserver
 * ObjectNodeObserver
-** ObjectLinkObserver
-** ObjectTransformObserver
-** ObjectMethodObserver
-** ObjectMethodGroupObserver
+	- ObjectLinkObserver
+	- ObjectTransformObserver
+	- ObjectMethodObserver
+	- ObjectMethodGroupObserver
 * GeometryNodeObserver
-** GeometryBoneObserver
-** GeometryLayerObserver
-** GeometryCreaseObserver
+	- GeometryBoneObserver
+	- GeometryLayerObserver
+	- GeometryCreaseObserver
 * MaterialNodeObserver
-** FragmentObserver
+	- FragmentObserver
 * TextNodeObserver
-** TextBufferObserver
+	- TextBufferObserver
 * BitmapNodeObserver
-** BitmapLayerObserver
+	- BitmapLayerObserver
 * CurveNodeObserver
 * AudioNodeObserver
-
-
 
 
 ## License
