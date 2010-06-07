@@ -1,4 +1,4 @@
-h1. Ruby-Verse
+# Ruby-Verse
 
 This is a Ruby binding for the Verse network protocol. Verse is a network 
 protocol that lets multiple applications act together as one large application by 
@@ -6,26 +6,24 @@ sharing data over a network.
 
 You can check out the current development source with Mercurial like so:
 
-    hg clone http://repo.deveiate.org/ruby-verse
+    hg clone http://bitbucket.org/ged/ruby-verse
 
 You can submit bug reports, suggestions, and read more about future plans at the
-project page:
+[project page](http://bitbucket.org/ged/ruby-verse).
 
-    http://deveiate.org/rbverse.html
+## Basic Design
 
-h2. Basic Design
-
-The API was inspired by "Ample":http://www.elmindreda.org/verse/ample/, a C++ wrapper for Verse by
+The API was inspired by [Ample](http://www.elmindreda.org/verse/ample/), a C++ wrapper for Verse by
 Camilla Berglund <elmindreda@elmindreda.org>.
 
 Ruby-Verse consists of several core module functions for interacting with a Verse server, a
 collection of Node classes, and mixin modules for adding Verse-awareness to your classes.
 
-h3. Namespace
+### Namespace
 
-All classes and modules in Ruby-Verse are declared inside the @Verse@ module.
+All classes and modules in Ruby-Verse are declared inside the _Verse_ module.
 
-h3. Classes
+### Classes
 
 * Session
 
@@ -49,7 +47,7 @@ h3. Classes
 ** AudioNode
 
 
-h3. Observer Mixins
+### Observer Mixins
 
 * ConnectionObserver
 * SessionObserver
@@ -78,6 +76,6 @@ h3. Observer Mixins
 
 
 
-h2. License
+## License
 
 See the included LICENSE file for licensing details.

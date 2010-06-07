@@ -3,7 +3,7 @@ excluded_pkgfiles: []
 
 project_pubdir: /usr/local/www/public/code/
 project_pubhost: deveiate
-project_homepage: http://deveiate.org/rbverse.html
+project_homepage: http://bitbucket.org/ged/ruby-verse
 project_requirements: 
   Verse: ">= 0.6.1"
 release_smtphost: mail.faeriemud.org
@@ -23,4 +23,4 @@ dev_dependencies:
 authors: 
   Michael Granger: ged@FaerieMUD.org
 post_install_message: ""
-project_name: rbverse
+project_name: Ruby-Verse

@@ -1,6 +1,6 @@
 #!rake -*- ruby -*-
 #
-# rbverse rakefile
+# Ruby-Verse rakefile
 #
 # Based on various other Rakefiles, especially one by Ben Bleything
 #
@@ -61,7 +61,7 @@ DATADIR       = BASEDIR + 'data'
 
 MANUALDIR     = DOCSDIR + 'manual'
 
-PROJECT_NAME  = 'rbverse'
+PROJECT_NAME  = 'Ruby-Verse'
 PKG_NAME      = PROJECT_NAME.downcase
 PKG_SUMMARY   = 'A Ruby binding for Verse'
 
@@ -213,16 +213,16 @@ DEPENDENCIES = {
 
 # Developer Gem dependencies: gemname => version
 DEVELOPMENT_DEPENDENCIES = {
-	'rake'        => '>= 0.8.7',
-	'rcodetools'  => '>= 0.7.0.0',
-	'rcov'        => '>= 0.8.1.2.0',
-	'rdoc'        => '>= 2.4.3',
-	'RedCloth'    => '>= 4.0.3',
-	'rspec'       => '>= 1.2.6',
-	'termios'     => '>= 0',
-	'text-format' => '>= 1.0.0',
-	'tmail'       => '>= 1.2.3.1',
-	'diff-lcs'    => '>= 1.1.2',
+	'rake'         => '>= 0.8.7',
+	'rcodetools'   => '>= 0.7.0.0',
+	'rcov'         => '>= 0.8.1.2.0',
+	'rdoc'         => '>= 2.4.3',
+	'RedCloth'     => '>= 4.0.3',
+	'rspec'        => '>= 1.2.6',
+	'ruby-termios' => '>= 0.9.6',
+	'text-format'  => '>= 1.0.0',
+	'tmail'        => '>= 1.2.3.1',
+	'diff-lcs'     => '>= 1.1.2',
 	'rake-compiler' => '>=0.7.0',
 }
 
@@ -245,7 +245,7 @@ GEMSPEC   = Gem::Specification.new do |gem|
 
 	gem.authors           = "Michael Granger"
 	gem.email             = ["ged@FaerieMUD.org"]
-	gem.homepage          = 'http://deveiate.org/rbverse.html'
+	gem.homepage          = 'http://bitbucket.org/ged/ruby-verse'
 
 	gem.has_rdoc          = true
 	gem.rdoc_options      = RDOC_OPTIONS
