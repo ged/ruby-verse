@@ -191,31 +191,31 @@ describe Verse do
 			Verse.logger.formatter.should equal( Verse.default_log_formatter )
 		end
 
-	end
+		describe "with new defaults" do
+			before( :all ) do
+				@original_logger = Verse.default_logger
+				@original_log_formatter = Verse.default_log_formatter
+			end
 
-	describe "logging subsystem with new defaults" do
-		before( :all ) do
-			@original_logger = Verse.default_logger
-			@original_log_formatter = Verse.default_log_formatter
-		end
-
-		after( :all ) do
-			Verse.default_logger = @original_logger
-			Verse.default_log_formatter = @original_log_formatter
-		end
+			after( :all ) do
+				Verse.default_logger = @original_logger
+				Verse.default_log_formatter = @original_log_formatter
+			end
 
 
-		it "uses the new defaults when the logging subsystem is reset" do
-			logger = mock( "dummy logger", :null_object => true )
-			formatter = mock( "dummy logger" )
+			it "uses the new defaults when the logging subsystem is reset" do
+				logger = mock( "dummy logger", :null_object => true )
+				formatter = mock( "dummy logger" )
 
-			Verse.default_logger = logger
-			Verse.default_log_formatter = formatter
+				Verse.default_logger = logger
+				Verse.default_log_formatter = formatter
 
-			logger.should_receive( :formatter= ).with( formatter )
+				logger.should_receive( :formatter= ).with( formatter ).twice
 
-			Verse.reset_logger
-			Verse.logger.should equal( logger )
+				Verse.reset_logger
+				Verse.logger.should equal( logger )
+			end
+
 		end
 
 	end

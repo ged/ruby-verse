@@ -111,17 +111,12 @@ module Verse
 		end
 
 
-		#########
-		protected
-		#########
-
 		### Return a fragment of an object's #inspect output for inclusion in objects 
 		### that include this mixin.
-		def inspect_fragment
-			return "version: %d.%d" % [
-				self.structure_version,
-				self.data_version
-			]
+		def inspect
+			rval = super
+			vstring = "%d.%d" % [ self.structure_version, self.data_version ]
+			return rval.sub( />$/, "; version: #{vstring}>" )
 		end
 
 	end # module Versioned
@@ -142,23 +137,24 @@ module Verse
 		######
 
 		### The object's observers
-		### @return [Array<Observer>]  the Array of observer.
+		### @return [Array<Verse::Observer>]  the objects that would like to be notified about 
+		###                                   changes in the receiver.
 		attr_reader :observers
 
 
 		### Add an observer.
 		### 
-		### @param [Observable] observer  the object that is interested in events from
-		###                               the receiver.
+		### @param [Observer] observer  the object that would like to be notified about 
+		###                             changes in the receiver.
 		def add_observer( observer )
-			@observers << observer
+			@observers << observer unless @observers.include?( observer )
 		end
 
 
 		### Remove an observer.
 		### 
-		### @param [Observable] observer  the object that is no longer interested in events
-		###                               from the receiver.
+		### @param [Observer] observer   the object that is no longer interested in being
+		###                              notified about changes in the receiver.
 		def remove_observer( observer )
 			@observers.delete( observer )
 		end

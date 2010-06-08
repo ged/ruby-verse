@@ -401,6 +401,49 @@ rbverse_cb_connect( void *unused, const char *name, const char *pass, const char
 
 
 /*
+ * Iterator for connect_terminate callback.
+ */
+static VALUE
+rbverse_cb_connect_terminate_i( VALUE observer, VALUE cb_args ) {
+	if ( !rb_obj_is_kind_of(observer, rbverse_mVerseConnectionObserver) )
+		return Qnil;
+
+	rbverse_log( "debug", "Connect_terminate callback: notifying observer: %s.", 
+	             RSTRING_PTR(rb_inspect( observer )) );
+	return rb_funcall2( observer, rb_intern("on_connect_terminate"), 4, RARRAY_PTR(cb_args) );
+}
+
+
+/*
+ * Call the connect_terminate handler after aqcuiring the GVL.
+ */
+static void *
+rbverse_cb_connect_terminate_body( void *ptr ) {
+	const char **args = (const char **)ptr;
+	const VALUE cb_args = rb_ary_new2( 2 );
+	const VALUE observers = rb_iv_get( rbverse_mVerse, "@observers" );
+
+	RARRAY_PTR(cb_args)[0] = rb_str_new2( args[0] );
+	RARRAY_PTR(cb_args)[1] = rb_str_new2( args[1] );
+
+	rb_block_call( observers, rb_intern("each"), 0, 0, rbverse_cb_connect_terminate_i, cb_args );
+
+	return NULL;
+}
+
+/*
+ * Callback for the 'connect_terminate' command.
+ */
+static void
+rbverse_cb_connect_terminate( void *unused, const char *address, const char *msg ) {
+	const char *(args[2]) = { address, msg };
+	printf( " Acquiring GVL for 'connect_terminate' event.\n" );
+	fflush( stdout );
+	rb_thread_call_with_gvl( rbverse_cb_connect_terminate_body, args );
+}
+
+
+/*
  * call-seq:
  *    Verse.add_observer( observer )
  *
