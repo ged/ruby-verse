@@ -4,7 +4,7 @@
  * 
  * @author Michael Granger <ged@FaerieMUD.org>
  * 
- * Copyright (c) 2010 Michael Granger
+ * Copyright (c) 2010 The FaerieMUD Consortium
  * 
  * All rights reserved.
  * 
@@ -97,9 +97,6 @@ rbverse_init_verse_curvenode( void ) {
 
 	/* Class methods */
 	rbverse_cVerseCurveNode = rb_define_class_under( rbverse_mVerse, "CurveNode", rbverse_cVerseNode );
-
-    /* Constants */
-	rb_define_const( rbverse_cVerseCurveNode, "TYPE_NUMBER", INT2FIX(V_NT_CURVE) );
 
 	/* Initializer */
 	rb_define_method( rbverse_cVerseCurveNode, "initialize", rbverse_verse_curvenode_initialize, 0 );

@@ -74,6 +74,20 @@ describe Verse::Session do
 		Verse::Session.mutex.should_not be_locked()
 	end
 
+	it "doesn't block other threads when calling .update" do
+		updater = Thread.new do
+			Thread.current.abort_on_exception = true
+			Verse::Session.update( 0.5 )
+		end
+
+		count = 0
+		count += 1 while updater.alive?
+
+		updater.join
+		count.should > 1
+	end
+
+
 	describe "instances" do
 		before( :each ) do
 			@address = "localhost:#@port"

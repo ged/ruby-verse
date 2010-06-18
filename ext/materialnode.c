@@ -4,7 +4,7 @@
  * 
  * @author Michael Granger <ged@FaerieMUD.org>
  * 
- * Copyright (c) 2010 Michael Granger
+ * Copyright (c) 2010 The FaerieMUD Consortium
  * 
  * All rights reserved.
  * 
@@ -97,9 +97,6 @@ rbverse_init_verse_materialnode( void ) {
 
 	/* Class methods */
 	rbverse_cVerseMaterialNode = rb_define_class_under( rbverse_mVerse, "MaterialNode", rbverse_cVerseNode );
-
-    /* Constants */
-	rb_define_const( rbverse_cVerseMaterialNode, "TYPE_NUMBER", INT2FIX(V_NT_MATERIAL) );
 
 	/* Initializer */
 	rb_define_method( rbverse_cVerseMaterialNode, "initialize", rbverse_verse_materialnode_initialize, 0 );

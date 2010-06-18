@@ -4,7 +4,7 @@
  * 
  * @author Michael Granger <ged@FaerieMUD.org>
  * 
- * Copyright (c) 2010 Michael Granger
+ * Copyright (c) 2010 The FaerieMUD Consortium
  * 
  * All rights reserved.
  * 
@@ -97,9 +97,6 @@ rbverse_init_verse_geometrynode( void ) {
 
 	/* Class methods */
 	rbverse_cVerseGeometryNode = rb_define_class_under( rbverse_mVerse, "GeometryNode", rbverse_cVerseNode );
-
-    /* Constants */
-	rb_define_const( rbverse_cVerseGeometryNode, "TYPE_NUMBER", INT2FIX(V_NT_GEOMETRY) );
 
 	/* Initializer */
 	rb_define_method( rbverse_cVerseGeometryNode, "initialize", rbverse_verse_geometrynode_initialize, 0 );

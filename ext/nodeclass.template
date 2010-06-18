@@ -4,7 +4,7 @@
  * 
  * @author Michael Granger <ged@FaerieMUD.org>
  * 
- * Copyright (c) 2010 Michael Granger
+ * Copyright (c) 2010 The FaerieMUD Consortium
  * 
  * All rights reserved.
  * 

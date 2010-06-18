@@ -8,9 +8,8 @@ require 'logger'
 require 'verse'
 
 
-# A collection of mixins shared between Verse classes. Stolen mostly
-# from ThingFish.
-
+# A collection of mixins shared between Verse classes. Some parts of this source
+# code were stolen from ThingFish under the BSD license.
 module Verse
 
 	### Add logging to a Verse class. Including classes get #log and #log_debug methods.
