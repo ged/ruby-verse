@@ -35,6 +35,13 @@ describe Verse::Session do
 		setup_logging( :debug )
 	end
 
+	before( :each ) do
+		Verse.remove_observers
+		@port = 45196
+		Verse.port = @port
+	end
+
+
 	it "can be created with an address" do
 		Verse::Session.new( TEST_ADDRESS ).address.should == TEST_ADDRESS
 	end
@@ -45,73 +52,38 @@ describe Verse::Session do
 		session.address.should == TEST_ADDRESS
 	end
 
-	it "can acquire the session mutex for the null session" do
-		pending "conversion to the Observer-based API"
-		current_session = nil
-		Verse::Session.synchronize { current_session = Verse::Session.current }
-		current_session.should == nil
+	it "knows about all of its connected instances" do
+		session1 = Verse::Session.new( "localhost:#@port" )
+		session1.connect( 'user', 'pass' )
+		session2 = Verse::Session.new( "localhost:#@port" )
+
+		2.times {
+			Verse::Session.all_connected
+			Verse::Session.update
+		}
+
+		Verse::Session.all_connected.should include( session1 )
+		Verse::Session.all_connected.should_not include( session2 )
 	end
 
-	describe "acting in the client role" do
+	it "can synchronize via a global session mutex to avoid race conditions with multiple sessions" do
+		Verse::Session.mutex.should_not be_locked()
+		Verse::Session.synchronize do
+			Verse::Session.mutex.should be_locked()
+		end
+		Verse::Session.mutex.should_not be_locked()
+	end
+
+	describe "instances" do
 		before( :each ) do
-			@port = 4950
-			Verse.port = @port
 			@address = "localhost:#@port"
 			@hostid = Verse.create_host_id
 			@session = Verse::Session.new( @address )
 		end
 
-		it "can register a callback for `connect_accept' events" do
-			pending "conversion to the Observer-based API"
-			session = nil
-
-			Verse.on_connect do |name, pass, address, exp_hostid|
-				Verse.log.notice "Got connect: %p" % [[ name, pass, address, exp_hostid ]]
-				session = Verse.connect_accept( 1, address, exp_hostid )
-			end
-
-			client_thread = Thread.new do
-				Thread.current.abort_on_exception = true
-				callback_values = nil
-
-				@session.connect( "testuser", "testpass" )
-				@session.on_connect_accept do |avatar, address, host_id|
-					Verse.log.notice "Got connect_accept: %p" % [[ avatar, address, host_id ]]
-					callback_values = [avatar, address, host_id]
-				end
-
-				while callback_values.nil?
-					Verse.callback_update( 0.25 )
-				end
-
-				callback_values
-			end
-
-			while client_thread.alive?
-				Verse.callback_update( 0.25 )
-			end
-
-			rval = client_thread.value
-			rval.should == [ 1, @address, @hostid ]
-
-			session.should be_a( Verse::Session )
-		end
-
+		it "calls #on_connect_accept on its SessionObservers when its connection is accepted"
 		it "can connect to a Verse host"
 		it "raises an exception if the address hasn't been set when connecting"
-
-	end
-
-	describe "acting in the server role" do
-
-		before( :each ) do
-			@port = 4950
-			Verse.port = @port
-			@hostid = Verse.create_host_id
-			@session = Verse::Session.new
-		end
-
-		it "can register a handler for `connect' events"
 
 	end
 

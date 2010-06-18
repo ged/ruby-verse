@@ -6,8 +6,14 @@ BEGIN {
 	basedir = Pathname.new( __FILE__ ).dirname.expand_path
 	libdir = basedir + "lib"
 
+	arch = Config::CONFIG['arch']
+	archlibdir = libdir + arch
+
 	puts ">>> Adding #{libdir} to load path..."
 	$LOAD_PATH.unshift( libdir.to_s )
+
+	puts ">>> Adding #{archlibdir} to load path..."
+	$LOAD_PATH.unshift( archlibdir.to_s )
 }
 
 

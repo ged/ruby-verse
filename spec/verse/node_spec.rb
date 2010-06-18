@@ -35,32 +35,13 @@ describe Verse::Node do
 
 
 	it "is an abstract class" do
-		pending "conversion to the Observer-based API"
 		expect { Verse::Node.new }.to raise_exception( NoMethodError, /undefined method/ )
 	end
 
 
 	describe "concrete subclasses" do
 
-		before( :each ) do
-			@session = mock( 'verse session' )
-			@nodeclass = Class.new( Verse::Node )
-		end
-
-		it "can be created" do
-			pending "conversion to the Observer-based API"
-			@session.should_receive( :create_node ).with( @nodeclass ).and_yield( :the_new_node )
-			@node = @nodeclass.new( @session )
-		end
-
-		it "can be created with a callback that is called when creation succeeds" do
-			pending "conversion to the Observer-based API"
-			@session.should_receive( :create_node ).with( @nodeclass ).and_yield( :the_new_node )
-			@nodeclass.new( @session ) do |node|
-				result = node
-			end
-			result.should == :the_new_node
-		end
+		it "can be created on the server"
 
 		it "can be destroyed"
 

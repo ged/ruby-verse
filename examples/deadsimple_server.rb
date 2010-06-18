@@ -73,6 +73,6 @@ Signal.trap( 'INT', &signal_handler )
 
 puts "Listening on port #{PORT}"
 $running = true
-Verse.update while $running
+Verse::Session.update while $running
 puts "Shutting down."
 

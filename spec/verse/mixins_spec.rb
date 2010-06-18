@@ -26,7 +26,7 @@ include Verse::Constants
 ###	C O N T E X T S
 #####################################################################
 
-describe Verse, "mixins" do
+describe Verse, "mixins: " do
 	include Verse::SpecHelpers
 
 	before( :all ) do
@@ -34,7 +34,7 @@ describe Verse, "mixins" do
 	end
 
 
-	describe Verse::Loggable, "mixed into a class" do
+	describe Verse::Loggable, "objects" do
 		before(:each) do
 			@logfile = StringIO.new('')
 			Verse.logger = Logger.new( @logfile )
@@ -54,13 +54,13 @@ describe Verse, "mixins" do
 		end
 
 
-		it "is able to output to the log via its #log method" do
+		it "are able to output to the log via the #log method" do
 			@obj.log_test_message( :debug, "debugging message" )
 			@logfile.rewind
 			@logfile.read.should =~ /debugging message/
 		end
 
-		it "is able to output to the log via its #log_debug method" do
+		it "are able to output to the log via the #log_debug method" do
 			@obj.logdebug_test_message( "sexydrownwatch" )
 			@logfile.rewind
 			@logfile.read.should =~ /sexydrownwatch/
@@ -70,8 +70,18 @@ describe Verse, "mixins" do
 
 	describe Verse::VersionUtilities do
 
+		it "doesn't affect an including object's public interface" do
+			including_class = Class.new do
+				include Verse::VersionUtilities
+				def use_vvec; vvec( "2.8.8" ); end
+			end
+			instance = including_class.new
+			instance.should_not respond_to( :vvec )
+			instance.use_vvec.should == [ 2, 8, 8 ].pack( 'N*' )
+		end
+
 		it "can vectorize x.y.z version strings" do
-			Verse::VersionUtilities.vvec( "1.12.8" ).should == [1, 12, 8].pack('N*')
+			Verse::VersionUtilities.vvec( "1.12.8" ).should == [ 1, 12, 8 ].pack( 'N*' )
 		end
 
 		it "vectorizes version strings so they are stringwise-comparable" do
@@ -84,7 +94,7 @@ describe Verse, "mixins" do
 	end
 
 
-	describe Verse::Versioned, "mixed into a class" do
+	describe Verse::Versioned, "objects" do
 
 		before( :each ) do
 			@versioned_class = Class.new do
@@ -94,27 +104,27 @@ describe Verse, "mixins" do
 		end
 
 
-		it "has a data version" do
+		it "have a data version" do
 			@versioned_object.data_version.should == 0
 		end
 
-		it "has a structure version" do
+		it "have a structure version" do
 			@versioned_object.structure_version.should == 0
 		end
 
-		it "has a incrementer for its data version" do
+		it "have a incrementer for its data version" do
 			@versioned_object.update_data_version
 			@versioned_object.data_version.should == 1
 			@versioned_object.structure_version.should == 0
 		end
 
-		it "has a incrementer for its structure version that also updates its data version" do
+		it "have a incrementer for its structure version that also updates its data version" do
 			@versioned_object.update_structure_version
 			@versioned_object.data_version.should == 1
 			@versioned_object.structure_version.should == 1
 		end
 
-		it "injects its version into inspect output" do
+		it "return their version in inspect output" do
 			@versioned_object.update_structure_version
 			@versioned_object.update_data_version
 			@versioned_object.inspect.should =~ /version: 1.2/
@@ -123,7 +133,7 @@ describe Verse, "mixins" do
 	end
 
 
-	describe Verse::Observable, "mixed into a class" do
+	describe Verse::Observable, "objects" do
 
 		before( :each ) do
 			@observable_class = Class.new do
@@ -133,30 +143,35 @@ describe Verse, "mixins" do
 			@object = Object.new
 		end
 
-		it "can add an observing object" do
+		it "are also versioned (via Verse::Versioned)" do
+			@observable.should be_a_kind_of( Verse::Versioned )
+			@observable.data_version.should == 0
+		end
+
+		it "can register an observer" do
 			@observable.add_observer( @object )
 			@observable.observers.should include( @object )
 		end
 
-		it "only registers an observing object once even if it's added more than once" do
+		it "only registers an observer once even if it's added more than once" do
 			@observable.add_observer( @object )
 			@observable.add_observer( @object )
 			@observable.observers.count( @object ).should == 1
 		end
 
-		it "can remove an observing object" do
+		it "can remove an observer" do
 			@observable.add_observer( @object )
 			@observable.remove_observer( @object )
 			@observable.observers.should_not include( @object )
 		end
 
-		it "removing an object that isn't a registered observer doesn't error" do
+		it "removing an observer that isn't registered doesn't error" do
 			expect {
 				@observable.remove_observer( @object )
 			}.to_not raise_exception()
 		end
 
-		it "can remove all observing objects" do
+		it "can remove all observers" do
 			@observable.add_observer( @object )
 			@observable.observers.should_not be_empty()
 			@observable.remove_observers
@@ -167,7 +182,7 @@ describe Verse, "mixins" do
 	end
 
 
-	describe Verse::Observer, "mixed into a class" do
+	describe Verse::Observer, "objects" do
 
 		before( :each ) do
 			@observer_class = Class.new do
@@ -177,7 +192,7 @@ describe Verse, "mixins" do
 			@observable = mock( "observable object" )
 		end
 
-		it "can add itself as an observer to an Observable object" do
+		it "can add themselves as an observer to Observable objects" do
 			@observable.should_receive( :add_observer ).with( @observer )
 			@observer.observe( @observable )
 		end
@@ -190,7 +205,7 @@ describe Verse, "mixins" do
 	end
 
 
-	describe Verse::PingObserver, "mixed into a class" do
+	describe Verse::PingObserver, "objects" do
 		before( :each ) do
 			@observer_class = Class.new do
 				include Verse::PingObserver
@@ -204,7 +219,7 @@ describe Verse, "mixins" do
 	end
 
 
-	describe Verse::ConnectionObserver, "mixed into a class" do
+	describe Verse::ConnectionObserver, "objects" do
 		before( :each ) do
 			@observer_class = Class.new do
 				include Verse::ConnectionObserver
@@ -216,11 +231,27 @@ describe Verse, "mixins" do
 			@observer.should respond_to( :on_connect )
 		end
 
+	end
+
+
+	describe Verse::SessionObserver, "objects" do
+		before( :each ) do
+			@observer_class = Class.new do
+				include Verse::SessionObserver
+			end
+			@observer = @observer_class.new
+		end
+
+
+		it "can receive connect_accept events" do
+			@observer.should respond_to( :on_connect_accept )
+		end
+
 		it "can receive connect_terminate events" do
 			@observer.should respond_to( :on_connect_terminate )
 		end
-	end
 
+	end
 
 end
 

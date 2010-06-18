@@ -32,6 +32,7 @@ All classes and modules in Ruby-Verse are declared inside the _Verse_ module.
 		* ObjectTransform
 		* ObjectMethod
 		* ObjectMethodGroup
+		* ObjectAnimation
 	- GeometryNode
 		* GeometryBone
 		* GeometryLayer
@@ -43,7 +44,10 @@ All classes and modules in Ruby-Verse are declared inside the _Verse_ module.
 	- BitmapNode
 		* BitmapLayer
 	- CurveNode
+	  * CurveKey
 	- AudioNode
+	  * AudioBuffer
+	  * AudioStream
 
 
 ### Observer Mixins
@@ -72,7 +76,8 @@ All classes and modules in Ruby-Verse are declared inside the _Verse_ module.
 	- BitmapLayerObserver
 * CurveNodeObserver
 * AudioNodeObserver
-
+  - AudioBufferObserver
+  - AudioStreamObserver
 
 ## License
 

@@ -2,9 +2,19 @@
 
 require 'rbconfig'
 require 'rake/extensiontask'
+require 'rake/clean'
+require 'erb'
 
 ARCH = Config::CONFIG['arch']
 ARCHLIBDIR = LIBDIR + ARCH
+
+NODE_TYPES = %w[audio bitmap curve geometry material object text]
+NODE_TYPE_REGEX = %r{#{EXTDIR}/(#{Regexp.union(NODE_TYPES)})node\.c}
+NODE_TYPE_SOURCES = NODE_TYPES.collect {|nodetype| EXTDIR + "#{nodetype}node.c" }
+
+NODE_TYPE_TEMPLATE = EXTDIR + 'nodeclass.template'
+
+CLEAN.include( ARCHLIBDIR.to_s )
 
 
 #####################################################################
@@ -21,10 +31,42 @@ namespace :spec do
     task :text  => [ :compile ]
 end
 
+desc "Clobber the existing source for the node classes and replace them with blank templated source."
+task :remake_node_classes do
+	log "This will REMOVE all the child node classes and replace it with blank templated source."
+	ask_for_confirmation( "Are you sure you want to do this?" ) do
+		FileUtils.rm_f( NODE_TYPE_SOURCES, :verbose => true )
+	end
+	Rake::Task[ :node_classes ].invoke
+end
+
+task :node_classes => NODE_TYPE_SOURCES
+task :compile => NODE_TYPE_SOURCES
+
+### Generate a skeleton at +target+ for the specified +nodetype+ using the NODE_TYPE_TEMPLATE.
+def gen_nodetype_source( nodetype, target )
+	trace "nodetype is %p" % [ nodetype ]
+
+	template = ERB.new( NODE_TYPE_TEMPLATE.read, nil, '<>' )
+	sourcecode = template.result( binding() )
+
+	File.open( target, File::EXCL|File::CREAT|File::WRONLY, 0644 ) do |ofh|
+		ofh.print( sourcecode )
+	end
+end
+
+rule NODE_TYPE_REGEX => NODE_TYPE_TEMPLATE.to_s do |task|
+	log "  creating %s from %s..." % [ task.name, NODE_TYPE_TEMPLATE ]
+	task.name =~ NODE_TYPE_REGEX
+	nodetype = $1 or abort "Ack! No nodetype?!?"
+	gen_nodetype_source( nodetype, task.name )
+end
+
+
 Rake::ExtensionTask.new do |ext|
     ext.name = 'verse_ext'
     ext.gem_spec = GEMSPEC
-    ext.ext_dir = 'ext'
+    ext.ext_dir = EXTDIR.to_s
     ext.lib_dir = ARCHLIBDIR.to_s
 	ext.source_pattern = "*.{c,h}"
 	ext.cross_compile = true

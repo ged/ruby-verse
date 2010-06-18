@@ -34,7 +34,7 @@ describe Verse do
 
 	before( :all ) do
 		setup_logging( :fatal )
-		@port = 45196;
+		@port = 45196
 		Verse.port = @port
 	end
 
@@ -68,7 +68,7 @@ describe Verse do
 	it "doesn't block other threads when calling #update" do
 		updater = Thread.new do
 			Thread.current.abort_on_exception = true
-			Verse.update( 0.5 )
+			Verse::Session.update( 0.5 )
 		end
 
 		count = 0
@@ -90,28 +90,30 @@ describe Verse do
 		end
 
 		it "are sent to objects which are PingObservers" do
-			observer_class = Class.new do
-				include Verse::PingObserver
+			pending "splitting the server and ping APIs a bit more" do
+				observer_class = Class.new do
+					include Verse::PingObserver
 
-				def on_ping( address, data )
-					@address = address
-					@data    = data
+					def on_ping( address, data )
+						@address = address
+						@data    = data
+					end
+
+					attr_reader :address, :data
 				end
 
-				attr_reader :address, :data
+				observer = observer_class.new
+				addr     = "127.0.0.1:#@port"
+				data     = 'expected message'
+
+				Verse.add_observer( observer )
+				Verse.ping( addr, data )
+				Verse::Session.update( 0.1 )
+				Verse::Session.update( 0.1 )
+
+				observer.address.should == addr
+				observer.data.should == data
 			end
-
-			observer = observer_class.new
-			addr     = "127.0.0.1:#@port"
-			data     = 'expected message'
-
-			Verse.add_observer( observer )
-			Verse.ping( addr, data )
-			Verse.update( 0.1 )
-			Verse.update( 0.1 )
-
-			observer.address.should == addr
-			observer.data.should == data
 		end
 
 		it "aren't sent to observers which aren't PingObservers" do
@@ -126,8 +128,8 @@ describe Verse do
 			observer.observe( Verse )
 			observer.should_not_receive( :on_ping )
 			Verse.ping( addr, data )
-			Verse.update( 0.1 )
-			Verse.update( 0.1 )
+			Verse::Session.update( 0.1 )
+			Verse::Session.update( 0.1 )
 		end
 
 	end

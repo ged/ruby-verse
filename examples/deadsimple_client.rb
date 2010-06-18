@@ -17,10 +17,11 @@ Verse.logger.level = Logger::DEBUG
 class Client
 	include Verse::SessionObserver
 
-	PORT = 4555
+	PORT = 4950
 
 	def initialize
 		@session = Verse::Session.new( "localhost:#{PORT}" )
+		@session.add_observer( self )
 		@my_avatar = nil
 		@running = false
 	end
@@ -29,7 +30,7 @@ class Client
 		puts "Connecting..."
 		@session.connect( 'user', 'pass' )
 		@running = true
-		Verse.update while @running
+		Verse::Session.update while @running
 		puts "Disconnected."
 	end
 
@@ -38,12 +39,18 @@ class Client
 		@running = false
 	end
 
-	def on_connect_accept( avatar )
-		puts "connected."
-		@my_avatar = avatar
+	def on_connect_accept( avatar, address, host_id )
+		puts "Got connect_accept: %p" % [[ avatar, address, host_id ]]
+		@avatar = avatar
+	end
+
+	def on_connect_terminate( address, msg )
+		puts "Got connect_terminate: %p" % [[ address, msg ]]
 	end
 
 end # class Client
 
-Client.new.start
+c = Client.new
+Signal.trap( 'INT' ) { c.shutdown }
+c.start
 

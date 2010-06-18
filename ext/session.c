@@ -42,33 +42,8 @@
 VALUE rbverse_cVerseSession;
 
 static VALUE rbverse_session_mutex;
+static st_table *session_table;
 
-static VALUE sym_connect_accept;
-
-	// sym_node_create, sym_node_destroy, sym_node_subscribe, sym_node_unsubscribe,
-	// sym_tag_group_create, sym_tag_group_destroy, sym_tag_group_subscribe,
-	// sym_tag_group_unsubscribe, sym_tag_create, sym_tag_destroy, sym_node_name_set,
-	// sym_o_transform_pos_real32, sym_o_transform_rot_real32, sym_o_transform_scale_real32,
-	// sym_o_transform_pos_real64, sym_o_transform_rot_real64, sym_o_transform_scale_real64,
-	// sym_o_transform_subscribe, sym_o_transform_unsubscribe, sym_o_light_set, sym_o_link_set,
-	// sym_o_link_destroy, sym_o_method_group_create, sym_o_method_group_destroy,
-	// sym_o_method_group_subscribe, sym_o_method_group_unsubscribe, sym_o_method_create,
-	// sym_o_method_destroy, sym_o_method_call, sym_o_anim_run, sym_o_hide,
-	// sym_g_layer_create, sym_g_layer_destroy, sym_g_layer_subscribe, sym_g_layer_unsubscribe,
-	// sym_g_vertex_set_xyz_real32, sym_g_vertex_delete_real32, sym_g_vertex_set_xyz_real64,
-	// sym_g_vertex_delete_real64, sym_g_vertex_set_uint32, sym_g_vertex_set_real64,
-	// sym_g_vertex_set_real32, sym_g_polygon_set_corner_uint32, sym_g_polygon_delete,
-	// sym_g_polygon_set_corner_real64, sym_g_polygon_set_corner_real32, sym_g_polygon_set_face_uint8,
-	// sym_g_polygon_set_face_uint32, sym_g_polygon_set_face_real64, sym_g_polygon_set_face_real32,
-	// sym_g_crease_set_vertex, sym_g_crease_set_edge, sym_g_bone_create, sym_g_bone_destroy,
-	// sym_m_fragment_create, sym_m_fragment_destroy, sym_b_dimensions_set, sym_b_layer_create,
-	// sym_b_layer_destroy, sym_b_layer_subscribe, sym_b_layer_unsubscribe, sym_b_tile_set,
-	// sym_t_language_set, sym_t_buffer_create, sym_t_buffer_destroy, sym_t_buffer_subscribe,
-	// sym_t_buffer_unsubscribe, sym_t_text_set, sym_c_curve_create, sym_c_curve_destroy,
-	// sym_c_curve_subscribe, sym_c_curve_unsubscribe, sym_c_key_set, sym_c_key_destroy,
-	// sym_a_buffer_create, sym_a_buffer_destroy, sym_a_buffer_subscribe, sym_a_buffer_unsubscribe,
-	// sym_a_block_set, sym_a_block_clear, sym_a_stream_create, sym_a_stream_destroy,
-	// sym_a_stream_subscribe, sym_a_stream_unsubscribe, sym_a_stream
 
 /* --------------------------------------------------
  *	Memory-management functions
@@ -83,10 +58,9 @@ rbverse_session_alloc( void ) {
 
 	ptr->id        = NULL;
 	ptr->address   = Qnil;
-	ptr->callbacks = Qnil;
 	ptr->self      = Qnil;
 
-	rbverse_log( "debug", "initialized a rbverse_SESSION <%p>", ptr );
+	rbverse_log( "debug", "allocated a rbverse_SESSION <%p>", ptr );
 	return ptr;
 }
 
@@ -98,7 +72,6 @@ static void
 rbverse_session_gc_mark( rbverse_SESSION *ptr ) {
 	if ( ptr ) {
 		rb_gc_mark( ptr->address );
-		rb_gc_mark( ptr->callbacks );
 		/* Don't need to mark ->self */
 	}
 }
@@ -118,7 +91,6 @@ rbverse_session_gc_free( rbverse_SESSION *ptr ) {
 
 		ptr->id         = NULL;
 		ptr->address    = Qnil;
-		ptr->callbacks  = Qnil;
 		ptr->self       = Qnil;
 
 		xfree( ptr );
@@ -146,7 +118,7 @@ check_session( VALUE self ) {
 /*
  * Fetch the data pointer and check it for sanity.
  */
-rbverse_SESSION *
+static rbverse_SESSION *
 rbverse_get_session( VALUE self ) {
 	rbverse_SESSION *session = check_session( self );
 
@@ -158,6 +130,46 @@ rbverse_get_session( VALUE self ) {
 
 
 /*
+ * Get the Verse::Session object that corresponds to the current Verse session, or
+ * Qnil if there isn't one.
+ */
+VALUE
+rbverse_get_current_session() {
+	VSession id = verse_session_get();
+	VALUE session;
+
+	if ( st_lookup(session_table, (st_data_t)id, (st_data_t *)&session) ) {
+		rbverse_log( "debug", "Got session object %s for session ID %p",
+			RSTRING_PTR(rb_inspect( session )), id );
+		return session;
+	} else {
+		rbverse_log( "warn", "No session object for session ID %p", id );
+		return Qnil;
+	}
+}
+
+
+/* 
+ * Call the specified +func+ with the given +arg+ after setting the current 
+ * verse session to +id+.
+ */
+VALUE
+rbverse_with_session_lock( VALUE sessionobj, VALUE (*func)(ANYARGS), VALUE arg ) {
+	rbverse_SESSION *session = rbverse_get_session( sessionobj );
+	VALUE rval = Qnil;
+
+	rbverse_log( "debug", "About to acquire the session mutex for session %d", session->id );
+	rb_mutex_lock( rbverse_session_mutex );
+	verse_session_set( session->id );
+    rval = rb_ensure( func, arg, rb_mutex_unlock, rbverse_session_mutex );
+	rbverse_log( "debug", "  done with the session mutex for session %d.", session->id );
+
+	return rval;
+}
+
+
+
+/*
  * Create a Verse::Session from a VSession.
  */
 VALUE
@@ -165,6 +177,7 @@ rbverse_verse_session_from_vsession( VSession id, VALUE address ) {
 	VALUE session_obj = rb_class_new_instance( 1, &address, rbverse_cVerseSession );
 	rbverse_SESSION *session = check_session( session_obj );
 
+	st_insert( session_table, (st_data_t)id, (st_data_t)session_obj );
 	session->id = id;
 
 	return session_obj;
@@ -189,7 +202,87 @@ rbverse_verse_session_s_allocate( VALUE klass ) {
 }
 
 
-/* Call the synchronized block after acquiring the mutex */
+/* Body of rbverse_verse_callback_update after GVL is given up. */
+static VALUE
+rbverse_verse_session_s_update_body( void *ptr ) {
+	uint32 *microseconds = (uint32 *)ptr;
+	verse_callback_update( *microseconds );
+	return Qtrue;
+}
+
+
+/* 
+ * Iterator for rbverse_verse_session_update 
+ */
+static int
+rbverse_verse_session_s_update_i( VSession id, VALUE session, st_data_t timeout ) {
+	rbverse_log( "debug", "Callback update for session %p (timeout=%u µs).", id, timeout );
+
+	verse_session_set( id );
+	rb_thread_blocking_region( rbverse_verse_session_s_update_body, (uint32 *)&timeout,
+		RUBY_UBF_IO, NULL );
+
+	rbverse_log( "debug", "  after the blocking region, there are %d client sessions",
+	             session_table->num_entries );
+
+	return ST_CONTINUE;
+}
+
+
+/*
+ * call-seq:
+ *     Verse::Session.update( timeout=0.1 )
+ * 
+ * Reads any incoming packets from the network, parses them (splits
+ * them into commands) and issues calls to any callbacks that are
+ * registered for the found commands. It will block for at most
+ * +timeout+ microseconds and wait for something to arrive.
+ * 
+ * An application must call this function periodically in order to
+ * service the connection with the other end of the Verse link; failure
+ * to do so will cause the other end's packet buffer to grow monotonically,
+ * which in turn might cause the connection to be terminated.
+ * 
+ * Any registered callbacks can be called as a result of calling this
+ * function if the corresponding Verse event has happened. Execution
+ * of this function is the only time during which callbacks can be
+ * called. This means that a client program can rely on the fact that
+ * calling some other Verse API function, such as any command-sending
+ * function, is guaranteed to not cause a callback to be invoked.
+ * 
+ * @param [Float] timeout  the maximum amount of time (in decimal seconds) to
+ *                         block waiting for updates
+ */
+static VALUE
+rbverse_verse_session_s_update( int argc, VALUE *argv, VALUE module ) {
+	VALUE seconds = Qnil;
+	uint32 microseconds, slice;
+
+	if ( rb_scan_args(argc, argv, "01", &seconds) == 1 )
+		microseconds = floor( NUM2DBL(seconds) * 1000000 );
+	else
+		microseconds = DEFAULT_UPDATE_TIMEOUT;
+
+	slice = microseconds / ( session_table->num_entries + 1 );
+	rbverse_log( "debug", "Update timeslice is %d µs", slice );
+
+	rbverse_log( "debug", "  updating the global session" );
+	verse_session_set( 0 );
+	rb_thread_blocking_region( rbverse_verse_session_s_update_body, (uint32 *)&slice,
+		RUBY_UBF_IO, NULL );
+
+	if ( session_table->num_entries ) {
+		rbverse_log( "debug", "  updating %d client sessions", session_table->num_entries );
+		st_foreach( session_table, rbverse_verse_session_s_update_i, (st_data_t)slice );
+	} else {
+		rbverse_log( "debug", "  no client sessions to update" );
+	}
+
+	return Qtrue;
+}
+
+
+/* Mutex body for rbverse_verse_session_s_synchronize */
 static VALUE
 rbverse_verse_session_s_synchronize_body( VALUE block ) {
 	return rb_funcall( block, rb_intern("call"), 0 );
@@ -212,10 +305,37 @@ rbverse_verse_session_s_synchronize( int argc, VALUE *argv, VALUE klass ) {
 
 	block = rb_block_proc();
 
-	return rb_mutex_synchronize( rbverse_session_mutex, rbverse_verse_session_s_synchronize_body, 
+	return rb_mutex_synchronize( rbverse_session_mutex, rbverse_verse_session_s_synchronize_body,
 	                             block );
 }
 
+
+/*
+ * Iterator body for rbverse_verse_session_s_all_connected
+ */
+static int
+rbverse_verse_session_s_all_connected_i( VSession id, VALUE session, st_data_t data ) {
+	VALUE *session_ary = (void *)data;
+	rb_ary_push( *session_ary, session );
+	return ST_CONTINUE;
+}
+
+
+/*
+ * call-seq:
+ *    Verse::Session.all_connected   -> array
+ *
+ * Return an Array of all Verse::Session instances that are connected (have a session ID).
+ *
+ * @return [Array<Verse::Session>]  all connected sessions
+ */
+static VALUE
+rbverse_verse_session_s_all_connected( VALUE klass ) {
+	VALUE sessions = rb_ary_new();
+
+	st_foreach( session_table, rbverse_verse_session_s_all_connected_i, (st_data_t)&sessions );
+	return sessions;
+}
 
 
 /* --------------------------------------------------------------
@@ -223,12 +343,12 @@ rbverse_verse_session_s_synchronize( int argc, VALUE *argv, VALUE klass ) {
  * -------------------------------------------------------------- */
 
 /*
- *  call-seq:
- *     Verse::Session.new( address )                  -> session
+ * call-seq:
+ *    Verse::Session.new( address )                  -> session
  *
- *  Create a new Verse::Session object that will use the given +address+. 
- *  
- *  @param [String] address  the address to bind/connect to
+ * Create a new Verse::Session object that will use the given +address+. 
+ * 
+ * @param [String] address  the address to bind/connect to
  */
 static VALUE
 rbverse_verse_session_initialize( int argc, VALUE *argv, VALUE self ) {
@@ -236,7 +356,6 @@ rbverse_verse_session_initialize( int argc, VALUE *argv, VALUE self ) {
 		rbverse_SESSION *session;
 		VALUE address = Qnil;
 
-		rbverse_log( "debug", "Initializing: %s", RSTRING_PTR(rb_inspect(self)) );
 		DATA_PTR( self ) = session = rbverse_session_alloc();
 
 		if ( rb_scan_args(argc, argv, "01", &address) ) {
@@ -244,9 +363,9 @@ rbverse_verse_session_initialize( int argc, VALUE *argv, VALUE self ) {
 			session->address = address;
 		}
 
-		session->callbacks = rb_hash_new();
 		session->self = self;
 
+		rb_call_super( 0, NULL );
 	} else {
 		rb_raise( rb_eRuntimeError,
 				  "Cannot re-initialize a session once it's been created." );
@@ -290,20 +409,6 @@ rbverse_verse_session_address_eq( VALUE self, VALUE address ) {
 
 /*
  *  call-seq:
- *     session.callbacks   -> hash
- *
- *  The hash of callbacks registered for this session.
- *
- */
-static VALUE
-rbverse_verse_session_callbacks( VALUE self ) {
-	rbverse_SESSION *session = rbverse_get_session( self );
-	return session->callbacks;
-}
-
-
-/*
- *  call-seq:
  *     session.connected?   -> true or false
  *
  *  Returns +true+ if the session has connected with the Verse server
@@ -323,6 +428,7 @@ static VALUE
 rbverse_verse_session_connect_body( VALUE args ) {
 	VALUE self, name, pass, expected_host_id;
 	rbverse_SESSION *session;
+	VSession session_id;
 	const char *name_str, *pass_str, *addr_str;
 	const uint8 *hostid = NULL;
 
@@ -340,11 +446,16 @@ rbverse_verse_session_connect_body( VALUE args ) {
 		hostid = (uint8 *)(StringValuePtr( expected_host_id ));
 
 	rbverse_log_with_context( self, "debug", "Sending 'connect' to %s", addr_str );
-	session->id = verse_send_connect( name_str, pass_str, addr_str, hostid );
-	rbverse_log_with_context( self, "debug", "  session: %p", session->id );
+	session_id = verse_send_connect( name_str, pass_str, addr_str, hostid );
+	rbverse_log_with_context( self, "debug", "  session: %p", session_id );
 
-	if ( !session->id )
+	if ( !session_id )
 		rb_raise( rbverse_eVerseConnectError, "Couldn't create connection to '%s'.", addr_str );
+
+	/* Add the instance to the session table, keyed by its VSession */
+	st_insert( session_table, (st_data_t)session_id, (st_data_t)self );
+
+	session->id = session_id;
 
 	return Qtrue;
 }
@@ -379,143 +490,6 @@ rbverse_verse_session_connect( int argc, VALUE *argv, VALUE self ) {
 }
 
 
-/*
- * Ruby handler for the 'connect_accept' message; called after re-establishing the GVL
- * from rbverse_handle_connect_accept().
- */
-static void *
-rbverse_handle_connect_accept_body( void *ptr ) {
-	rbverse_CONNECT_ACCEPT_EVENT *event = (rbverse_CONNECT_ACCEPT_EVENT *)ptr;
-	rbverse_SESSION *session = event->session;
-	VALUE block = Qnil;
-	VALUE avatarid, addrstring, hostid_string;
-
-	if ( !session )
-		rb_fatal( "Pointer to session was NULL!" );
-
-	avatarid = INT2FIX( event->avatar );
-	addrstring = rb_str_new2( event->address );
-	hostid_string = rbverse_host_id2str( event->hostid );
-	block = rb_hash_aref( session->callbacks, sym_connect_accept );
-
-	if ( RTEST(block) ) {
-		rb_funcall( block, rb_intern("call"), 4, session->self, avatarid, addrstring, hostid_string );
-	}
-
-	return NULL;
-}
-
-
-/*
- * Verse callback for the 'connect_accept' message
- */
-static void
-rbverse_cb_connect_accept( void *userdata, VNodeID avatar, const char *address, uint8 *host_id ) {
-	rbverse_CONNECT_ACCEPT_EVENT *event = malloc( sizeof(rbverse_CONNECT_ACCEPT_EVENT) );
-
-	printf( ">>> connect_accept callback: userdata is: %p\n", userdata );
-	fflush( stdout );
-
-	/* If we can't malloc, acquire the gvl to rb_sys_fail() */
-	if ( event ) {
-		event->session = (rbverse_SESSION *)userdata;
-		event->avatar  = avatar;
-		event->address = address;
-		event->hostid  = host_id;
-
-		rb_thread_call_with_gvl( rbverse_handle_connect_accept_body, (void *)event );
-
-		/* Handle exception case? */
-		free( event );
-	} else {
-		free( event );
-		const char *msg = "while handling connect_accept";
-		rb_thread_call_with_gvl( rbverse_sysfail, (void *)msg );
-	}
-
-}
-
-
-/*
- * Synchronized callback setter for #on_connect_accept
- */
-static VALUE
-rbverse_set_connect_accept( VALUE self ) {
-	rbverse_SESSION *session = rbverse_get_session( self );
-
-	if ( !session->id )
-		rb_raise( rbverse_eVerseSessionError, "not connected." );
-
-	rbverse_log_with_context( self, "debug",
-	                          "Setting connect_accept callback with user data = %p", session );
-	verse_callback_set( verse_send_connect_accept, rbverse_cb_connect_accept, (void *)session );
-
-	return Qtrue;
-}
-
-
-/*
- * call-seq:
- *    session.on_connect_accept {|avatar| block }
- *
- * Callback for the 'connect_accept' event. 
- *
- * @yield [avatar, hostid]  Called when the event is received.
- * @yieldparam [Verse::Node]    avatar  the object node that acts as the client's 
- *                                      representation on the Verse host
- * @yieldparam [String]         hostid  the server's host ID key
- */
-static VALUE
-rbverse_verse_session_on_connect_accept( VALUE self ) {
-	rbverse_SESSION *session = rbverse_get_session( self );
-	VALUE block = Qnil;
-
-	if ( rb_block_given_p() ) {
-		rbverse_log_with_context( self, "debug",
-			"Setting connect_accept callback to: %s", RSTRING_PTR(rb_inspect( block )) );
-
-		rbverse_log_with_context( self, "debug", "Acquiring session lock for session %p", session->id );
-		rb_hash_aset( session->callbacks, sym_connect_accept, block );
-		rb_mutex_synchronize( rbverse_session_mutex, rbverse_set_connect_accept, self );
-		rbverse_log_with_context( self, "debug", "  done with session lock for session %p", session->id );
-	} else {
-		block = rb_hash_aref( session->callbacks, sym_connect_accept );
-	}
-
-	return block;
-}
-
-
-/*
- * call-seq:
- *    session.on_connect_accept = handler
- * 
- * Set the callback for the 'connect_accept' event.
- * 
- * @param [#call] handler  A callable object that will handle the event. See #on_connect_accept for
- *                         details.
- */
-static VALUE
-rbverse_verse_session_on_connect_accept_eq( VALUE self, VALUE handler ) {
-	rbverse_SESSION *session = rbverse_get_session( self );
-
-	if ( !rb_respond_to(handler, rb_intern( "call" )) )
-		rb_raise( rb_eTypeError, "expected %s to respond to #call",
-		          RSTRING_PTR(rb_inspect( handler )) );
-
-	rbverse_log_with_context( self, "debug",
-	                          "Setting connect_accept callback to: %s",
-	                          RSTRING_PTR(rb_inspect( handler )) );
-
-	rbverse_log_with_context( self, "debug", "Acquiring session lock for session %p", session->id );
-	rb_hash_aset( session->callbacks, sym_connect_accept, handler );
-	rb_mutex_synchronize( rbverse_session_mutex, rbverse_set_connect_accept, self );
-	rbverse_log_with_context( self, "debug", "  done with session lock for session %p", session->id );
-
-	return handler;
-}
-
-
 /* 
  * call-seq: 
  *    session.terminate( address, message )
@@ -542,9 +516,257 @@ rbverse_verse_session_terminate( VALUE self, VALUE message ) {
 
 	verse_send_connect_terminate( RSTRING_PTR(session->address), msg );
 
+	rbverse_log( "debug", "Removing terminated session %p from session table (%p, %d entries)",
+	             session->id, session_table, session_table->num_entries );
+	st_delete_safe( session_table, (st_data_t*)&session->id, 0, Qundef );
+	st_cleanup_safe( session_table, Qundef );
+
 	return Qtrue;
 }
 
+
+/* 
+ * The part of Verse::Session#node_index_subscribe called inside the
+ * session lock.
+ */
+static VALUE
+rbverse_verse_session_subscribe_node_index_l( VALUE typemask ) {
+	verse_send_node_index_subscribe( (uint32)typemask );
+	return Qtrue;
+}
+
+
+/*
+ * call-seq:
+ *    session.subscribe_node_index( *node_classes )
+ *
+ * Subscribe to creation and destruction events for the specified +node_classes+. Node 
+ * creation will be sent to the Verse::SessionObservers via their #on_node_create method,
+ * and when nodes are deleted, #on_node_destroy is called.
+ *
+ * @param [Array<Class>] node_classes  one or more subclasses of Verse::Node that indicate
+ *                                     which types of nodes to subscribe to. If you include
+ *                                     Verse::Node itself, all node types will be subscribed
+ *                                     to. Calling this method with no classes unsubscribes
+ *                                     from all node types.
+ */
+static VALUE
+rbverse_verse_session_subscribe_node_index( int argc, VALUE *argv, VALUE self ) {
+	VALUE node_classes = Qnil;
+	uint32 typemask = ~0;
+	int i;
+
+	if ( rb_scan_args(argc, argv, "0*", &node_classes) ) {
+		for ( i = 0; i < RARRAY_LEN(node_classes); i++ ) {
+			VALUE typenum = rb_const_get( RARRAY_PTR(node_classes)[i], rb_intern("TYPE_NUMBER") );
+			typemask |= (1 << FIX2INT( typenum ));
+		}
+	}
+
+	rbverse_with_session_lock( self, rbverse_verse_session_subscribe_node_index_l, (VALUE)typemask );
+
+	return INT2FIX( typemask );
+}
+
+
+/* --------------------------------------------------------------
+ * Callbacks
+ * -------------------------------------------------------------- */
+
+/*
+ * Iterator body for connect_accept observers.
+ */
+static VALUE
+rbverse_cb_connect_accept_i( VALUE observer, VALUE cb_args ) {
+	if ( !rb_obj_is_kind_of(observer, rbverse_mVerseSessionObserver) )
+		return Qnil;
+
+	rbverse_log( "debug", "Connect_accept callback: notifying observer: %s.",
+	             RSTRING_PTR(rb_inspect( observer )) );
+	return rb_funcall2( observer, rb_intern("on_connect_accept"), 
+	                    RARRAY_LEN(cb_args), RARRAY_PTR(cb_args) );
+}
+
+
+/*
+ * Ruby handler for the 'connect_accept' message; called after re-establishing the GVL
+ * from rbverse_cb_connect_accept().
+ */
+static void *
+rbverse_cb_connect_accept_body( void *ptr ) {
+	rbverse_CONNECT_ACCEPT_EVENT *event = (rbverse_CONNECT_ACCEPT_EVENT *)ptr;
+	const VALUE cb_args = rb_ary_new2( 3 );
+	VALUE session = rbverse_get_current_session();
+	VALUE observers = rb_funcall( session, rb_intern("observers"), 0 );
+
+	RARRAY_PTR(cb_args)[0] = INT2FIX( event->avatar );
+	RARRAY_PTR(cb_args)[1] = rb_str_new2( event->address );
+	RARRAY_PTR(cb_args)[2] = rbverse_host_id2str( event->hostid );
+
+	rb_block_call( observers, rb_intern("each"), 0, 0, rbverse_cb_connect_accept_i, cb_args );
+
+	return NULL;
+}
+
+
+/*
+ * Verse callback for the 'connect_accept' message
+ */
+static void
+rbverse_cb_connect_accept( void *unused, VNodeID avatar, const char *address, uint8 *host_id ) {
+	struct rbverse_connect_accept_event event;
+
+	event.avatar  = avatar;
+	event.address = address;
+	event.hostid  = host_id;
+
+	rb_thread_call_with_gvl( rbverse_cb_connect_accept_body, (void *)&event );
+}
+
+
+/*
+ * Iterator body for connect_terminate observers.
+ */
+static VALUE
+rbverse_cb_connect_terminate_i( VALUE observer, VALUE cb_args ) {
+	if ( !rb_obj_is_kind_of(observer, rbverse_mVerseSessionObserver) )
+		return Qnil;
+
+	rbverse_log( "debug", "Connect_terminate callback: notifying observer: %s.",
+	             RSTRING_PTR(rb_inspect( observer )) );
+	return rb_funcall2( observer, rb_intern("on_connect_terminate"), 
+	                    RARRAY_LEN(cb_args), RARRAY_PTR(cb_args) );
+}
+
+
+/*
+ * Call the connect_terminate handler after aqcuiring the GVL.
+ */
+static void *
+rbverse_cb_connect_terminate_body( void *ptr ) {
+	const char **args = (const char **)ptr;
+	const VALUE cb_args = rb_ary_new2( 2 );
+	VALUE session, observers;
+
+	session = rbverse_get_current_session();
+	observers = rb_funcall( session, rb_intern("observers"), 0 );
+
+	RARRAY_PTR(cb_args)[0] = rb_str_new2( args[0] );
+	RARRAY_PTR(cb_args)[1] = rb_str_new2( args[1] );
+
+	rb_block_call( observers, rb_intern("each"), 0, 0, rbverse_cb_connect_terminate_i, cb_args );
+
+	return NULL;
+}
+
+
+/*
+ * Callback for the 'connect_terminate' command.
+ */
+static void
+rbverse_cb_connect_terminate( void *unused, const char *address, const char *msg ) {
+	const char *(args[2]) = { address, msg };
+	printf( " Acquiring GVL for 'connect_terminate' event.\n" );
+	fflush( stdout );
+	rb_thread_call_with_gvl( rbverse_cb_connect_terminate_body, args );
+}
+
+
+/*
+ * Iterator body for node_create observers.
+ */
+static VALUE
+rbverse_cb_node_create_i( VALUE observer, VALUE node ) {
+	if ( !rb_obj_is_kind_of(observer, rbverse_mVerseSessionObserver) )
+		return Qnil;
+
+	rbverse_log( "debug", "Node_create callback: notifying observer: %s.",
+	             RSTRING_PTR(rb_inspect( observer )) );
+	return rb_funcall2( observer, rb_intern("on_node_create"), 1, &node );
+}
+
+
+/*
+ * Call the node_create handler after aqcuiring the GVL.
+ */
+static void *
+rbverse_cb_node_create_body( void *ptr ) {
+	rbverse_NODE_CREATE_EVENT *event = (rbverse_NODE_CREATE_EVENT *)ptr;
+	VALUE node, session, observers;
+
+	session   = rbverse_get_current_session();
+	observers = rb_funcall( session, rb_intern("observers"), 0 );
+	node      = rbverse_wrap_verse_node( event->node_id, event->type, event->owner );
+
+	rb_funcall3( node, rb_intern("session="), 1, &session );
+	rb_block_call( observers, rb_intern("each"), 0, 0, rbverse_cb_node_create_i, node );
+
+	return NULL;
+}
+
+/*
+ * Callback for the 'node_create' command.
+ */
+static void
+rbverse_cb_node_create( void *unused, VNodeID node_id, VNodeType type, VNodeOwner owner ) {
+	rbverse_NODE_CREATE_EVENT event;
+
+	event.node_id = node_id;
+	event.type    = type;
+	event.owner   = owner;
+
+	printf( " Acquiring GVL for 'node_create' event.\n" );
+	fflush( stdout );
+
+	rb_thread_call_with_gvl( rbverse_cb_node_create_body, (void *)&event );
+}
+
+
+
+/*
+ * Iterator body for node_destroy observers.
+ */
+static VALUE
+rbverse_cb_node_destroy_i( VALUE observer, VALUE node ) {
+	if ( !rb_obj_is_kind_of(observer, rbverse_mVerseSessionObserver) )
+		return Qnil;
+
+	rbverse_log( "debug", "Node_destroy callback: notifying observer: %s.",
+	             RSTRING_PTR(rb_inspect( observer )) );
+	return rb_funcall2( observer, rb_intern("on_node_destroy"), 1, &node );
+}
+
+
+/*
+ * Call the node_destroy handler after aqcuiring the GVL.
+ */
+static void *
+rbverse_cb_node_destroy_body( void *ptr ) {
+	VNodeID *node_id = (VNodeID *)ptr;
+	VALUE node;
+
+	if ( RTEST(node = rbverse_lookup_verse_node( *node_id )) ) {
+		VALUE session = rb_funcall( node, rb_intern("session"), 0 );
+		VALUE observers = rb_funcall( session, rb_intern("observers"), 0 );
+		rbverse_mark_node_destroyed( node );
+		rb_block_call( observers, rb_intern("each"), 0, 0, rbverse_cb_node_destroy_i, node );
+	} else {
+		rbverse_log( "info", "destroy event received for unwrapped node %x", node_id );
+	}
+
+	return NULL;
+}
+
+/*
+ * Callback for the 'node_destroy' command.
+ */
+static void
+rbverse_cb_node_destroy( void *unused, VNodeID node_id ) {
+	printf( " Acquiring GVL for 'node_destroy' event.\n" );
+	fflush( stdout );
+
+	rb_thread_call_with_gvl( rbverse_cb_node_destroy_body, (void *)&node_id );
+}
 
 
 
@@ -555,7 +777,7 @@ void
 rbverse_init_verse_session( void ) {
 	rbverse_log( "debug", "Initializing Verse::Session" );
 
-	rb_global_variable( &rbverse_session_mutex );
+	session_table = st_init_numtable();
 	rbverse_session_mutex = rb_mutex_new();
 
 #ifdef FOR_RDOC
@@ -564,10 +786,20 @@ rbverse_init_verse_session( void ) {
 
 	/* Class methods */
 	rbverse_cVerseSession = rb_define_class_under( rbverse_mVerse, "Session", rb_cObject );
+	rb_include_module( rbverse_cVerseSession, rbverse_mVerseLoggable );
+	rb_include_module( rbverse_cVerseSession, rbverse_mVerseObservable );
+
 	rb_define_alloc_func( rbverse_cVerseSession, rbverse_verse_session_s_allocate );
 
+	rb_define_singleton_method( rbverse_cVerseSession, "update", rbverse_verse_session_s_update, -1 );
+	rb_define_alias( rb_singleton_class(rbverse_cVerseSession), "callback_update", "update" );
+
+	rb_attr( rb_singleton_class(rbverse_cVerseSession), rb_intern("mutex"), Qtrue, Qfalse, Qtrue );
+	rb_iv_set( rbverse_cVerseSession, "@mutex", rbverse_session_mutex );
 	rb_define_singleton_method( rbverse_cVerseSession, "synchronize",
 	                            rbverse_verse_session_s_synchronize, -1 );
+	rb_define_singleton_method( rbverse_cVerseSession, "all_connected",
+	                            rbverse_verse_session_s_all_connected, 0 );
 
 	/* Initializer */
 	rb_define_method( rbverse_cVerseSession, "initialize", rbverse_verse_session_initialize, -1 );
@@ -576,23 +808,13 @@ rbverse_init_verse_session( void ) {
 	rb_define_method( rbverse_cVerseSession, "address", rbverse_verse_session_address, 0 );
 	rb_define_method( rbverse_cVerseSession, "address=", rbverse_verse_session_address_eq, 1 );
 
-	rb_define_method( rbverse_cVerseSession, "callbacks", rbverse_verse_session_callbacks, 0 );
 	rb_define_method( rbverse_cVerseSession, "connected?", rbverse_verse_session_connected_p, 0 );
 
 	rb_define_method( rbverse_cVerseSession, "connect", rbverse_verse_session_connect, -1 );
-
-	rb_define_method( rbverse_cVerseSession, "on_connect_accept",
-	                  rbverse_verse_session_on_connect_accept, 0 );
-	rb_define_method( rbverse_cVerseSession, "on_connect_accept=",
-	                  rbverse_verse_session_on_connect_accept_eq, 1 );
-
 	rb_define_method( rbverse_cVerseSession, "terminate", rbverse_verse_session_terminate, 1 );
 
-	// node_index_subscribe(uint32 mask);
-	// node_create(VNodeID node_id, VNodeType type, VNodeOwner owner);
-	// node_destroy(VNodeID node_id);
-	// node_subscribe(VNodeID node_id);
-	// node_unsubscribe(VNodeID node_id);
+	rb_define_method( rbverse_cVerseSession, "subscribe_node_index",
+	                  rbverse_verse_session_subscribe_node_index, -1 );
 
 	// tag_group_create(VNodeID node_id, uint16 group_id, const char *name);
 	// tag_group_destroy(VNodeID node_id, uint16 group_id);
@@ -604,92 +826,9 @@ rbverse_init_verse_session( void ) {
 
 	// node_name_set(VNodeID node_id, const char *name);
 
-	// sym_connect_accept              = ID2SYM( rb_intern("connect_accept") );
-
-	// sym_node_create                 = ID2SYM( rb_intern("node_create") );
-	// sym_node_destroy                = ID2SYM( rb_intern("node_destroy") );
-	// sym_node_subscribe              = ID2SYM( rb_intern("node_subscribe") );
-	// sym_node_unsubscribe            = ID2SYM( rb_intern("node_unsubscribe") );
-	// sym_tag_group_create            = ID2SYM( rb_intern("tag_group_create") );
-	// sym_tag_group_destroy           = ID2SYM( rb_intern("tag_group_destroy") );
-	// sym_tag_group_subscribe         = ID2SYM( rb_intern("tag_group_subscribe") );
-	// sym_tag_group_unsubscribe       = ID2SYM( rb_intern("tag_group_unsubscribe") );
-	// sym_tag_create                  = ID2SYM( rb_intern("tag_create") );
-	// sym_tag_destroy                 = ID2SYM( rb_intern("tag_destroy") );
-	// sym_node_name_set               = ID2SYM( rb_intern("node_name_set") );
-	// sym_o_transform_pos_real32      = ID2SYM( rb_intern("o_transform_pos_real32") );
-	// sym_o_transform_rot_real32      = ID2SYM( rb_intern("o_transform_rot_real32") );
-	// sym_o_transform_scale_real32    = ID2SYM( rb_intern("o_transform_scale_real32") );
-	// sym_o_transform_pos_real64      = ID2SYM( rb_intern("o_transform_pos_real64") );
-	// sym_o_transform_rot_real64      = ID2SYM( rb_intern("o_transform_rot_real64") );
-	// sym_o_transform_scale_real64    = ID2SYM( rb_intern("o_transform_scale_real64") );
-	// sym_o_transform_subscribe       = ID2SYM( rb_intern("o_transform_subscribe") );
-	// sym_o_transform_unsubscribe     = ID2SYM( rb_intern("o_transform_unsubscribe") );
-	// sym_o_light_set                 = ID2SYM( rb_intern("o_light_set") );
-	// sym_o_link_set                  = ID2SYM( rb_intern("o_link_set") );
-	// sym_o_link_destroy              = ID2SYM( rb_intern("o_link_destroy") );
-	// sym_o_method_group_create       = ID2SYM( rb_intern("o_method_group_create") );
-	// sym_o_method_group_destroy      = ID2SYM( rb_intern("o_method_group_destroy") );
-	// sym_o_method_group_subscribe    = ID2SYM( rb_intern("o_method_group_subscribe") );
-	// sym_o_method_group_unsubscribe  = ID2SYM( rb_intern("o_method_group_unsubscribe") );
-	// sym_o_method_create             = ID2SYM( rb_intern("o_method_create") );
-	// sym_o_method_destroy            = ID2SYM( rb_intern("o_method_destroy") );
-	// sym_o_method_call               = ID2SYM( rb_intern("o_method_call") );
-	// sym_o_anim_run                  = ID2SYM( rb_intern("o_anim_run") );
-	// sym_o_hide                      = ID2SYM( rb_intern("o_hide") );
-	// sym_g_layer_create              = ID2SYM( rb_intern("g_layer_create") );
-	// sym_g_layer_destroy             = ID2SYM( rb_intern("g_layer_destroy") );
-	// sym_g_layer_subscribe           = ID2SYM( rb_intern("g_layer_subscribe") );
-	// sym_g_layer_unsubscribe         = ID2SYM( rb_intern("g_layer_unsubscribe") );
-	// sym_g_vertex_set_xyz_real32     = ID2SYM( rb_intern("g_vertex_set_xyz_real32") );
-	// sym_g_vertex_delete_real32      = ID2SYM( rb_intern("g_vertex_delete_real32") );
-	// sym_g_vertex_set_xyz_real64     = ID2SYM( rb_intern("g_vertex_set_xyz_real64") );
-	// sym_g_vertex_delete_real64      = ID2SYM( rb_intern("g_vertex_delete_real64") );
-	// sym_g_vertex_set_uint32         = ID2SYM( rb_intern("g_vertex_set_uint32") );
-	// sym_g_vertex_set_real64         = ID2SYM( rb_intern("g_vertex_set_real64") );
-	// sym_g_vertex_set_real32         = ID2SYM( rb_intern("g_vertex_set_real32") );
-	// sym_g_polygon_set_corner_uint32 = ID2SYM( rb_intern("g_polygon_set_corner_uint32") );
-	// sym_g_polygon_delete            = ID2SYM( rb_intern("g_polygon_delete") );
-	// sym_g_polygon_set_corner_real64 = ID2SYM( rb_intern("g_polygon_set_corner_real64") );
-	// sym_g_polygon_set_corner_real32 = ID2SYM( rb_intern("g_polygon_set_corner_real32") );
-	// sym_g_polygon_set_face_uint8    = ID2SYM( rb_intern("g_polygon_set_face_uint8") );
-	// sym_g_polygon_set_face_uint32   = ID2SYM( rb_intern("g_polygon_set_face_uint32") );
-	// sym_g_polygon_set_face_real64   = ID2SYM( rb_intern("g_polygon_set_face_real64") );
-	// sym_g_polygon_set_face_real32   = ID2SYM( rb_intern("g_polygon_set_face_real32") );
-	// sym_g_crease_set_vertex         = ID2SYM( rb_intern("g_crease_set_vertex") );
-	// sym_g_crease_set_edge           = ID2SYM( rb_intern("g_crease_set_edge") );
-	// sym_g_bone_create               = ID2SYM( rb_intern("g_bone_create") );
-	// sym_g_bone_destroy              = ID2SYM( rb_intern("g_bone_destroy") );
-	// sym_m_fragment_create           = ID2SYM( rb_intern("m_fragment_create") );
-	// sym_m_fragment_destroy          = ID2SYM( rb_intern("m_fragment_destroy") );
-	// sym_b_dimensions_set            = ID2SYM( rb_intern("b_dimensions_set") );
-	// sym_b_layer_create              = ID2SYM( rb_intern("b_layer_create") );
-	// sym_b_layer_destroy             = ID2SYM( rb_intern("b_layer_destroy") );
-	// sym_b_layer_subscribe           = ID2SYM( rb_intern("b_layer_subscribe") );
-	// sym_b_layer_unsubscribe         = ID2SYM( rb_intern("b_layer_unsubscribe") );
-	// sym_b_tile_set                  = ID2SYM( rb_intern("b_tile_set") );
-	// sym_t_language_set              = ID2SYM( rb_intern("t_language_set") );
-	// sym_t_buffer_create             = ID2SYM( rb_intern("t_buffer_create") );
-	// sym_t_buffer_destroy            = ID2SYM( rb_intern("t_buffer_destroy") );
-	// sym_t_buffer_subscribe          = ID2SYM( rb_intern("t_buffer_subscribe") );
-	// sym_t_buffer_unsubscribe        = ID2SYM( rb_intern("t_buffer_unsubscribe") );
-	// sym_t_text_set                  = ID2SYM( rb_intern("t_text_set") );
-	// sym_c_curve_create              = ID2SYM( rb_intern("c_curve_create") );
-	// sym_c_curve_destroy             = ID2SYM( rb_intern("c_curve_destroy") );
-	// sym_c_curve_subscribe           = ID2SYM( rb_intern("c_curve_subscribe") );
-	// sym_c_curve_unsubscribe         = ID2SYM( rb_intern("c_curve_unsubscribe") );
-	// sym_c_key_set                   = ID2SYM( rb_intern("c_key_set") );
-	// sym_c_key_destroy               = ID2SYM( rb_intern("c_key_destroy") );
-	// sym_a_buffer_create             = ID2SYM( rb_intern("a_buffer_create") );
-	// sym_a_buffer_destroy            = ID2SYM( rb_intern("a_buffer_destroy") );
-	// sym_a_buffer_subscribe          = ID2SYM( rb_intern("a_buffer_subscribe") );
-	// sym_a_buffer_unsubscribe        = ID2SYM( rb_intern("a_buffer_unsubscribe") );
-	// sym_a_block_set                 = ID2SYM( rb_intern("a_block_set") );
-	// sym_a_block_clear               = ID2SYM( rb_intern("a_block_clear") );
-	// sym_a_stream_create             = ID2SYM( rb_intern("a_stream_create") );
-	// sym_a_stream_destroy            = ID2SYM( rb_intern("a_stream_destroy") );
-	// sym_a_stream_subscribe          = ID2SYM( rb_intern("a_stream_subscribe") );
-	// sym_a_stream_unsubscribe        = ID2SYM( rb_intern("a_stream_unsubscribe") );
-	// sym_a_stream                    = ID2SYM( rb_intern("a_stream") );
+	verse_callback_set( verse_send_connect_accept, rbverse_cb_connect_accept, NULL );
+	verse_callback_set( verse_send_connect_terminate, rbverse_cb_connect_terminate, NULL );
+	verse_callback_set( verse_send_node_create, rbverse_cb_node_create, NULL );
+	verse_callback_set( verse_send_node_destroy, rbverse_cb_node_destroy, NULL );
 }
 

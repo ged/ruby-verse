@@ -41,6 +41,7 @@ module Verse
 				sym = :debug if @force_debug
 				Verse.logger.add( LEVEL[sym], msg, @classname, &block )
 			end
+
 		end # ClassNameProxy
 
 		#########
@@ -56,6 +57,7 @@ module Verse
 		def log_debug
 			@log_debug_proxy ||= ClassNameProxy.new( self.class, true )
 		end
+
 	end # module Loggable
 
 
@@ -78,10 +80,23 @@ module Verse
 	### A mixin for adding data and structure versioning.
 	module Versioned
 
+		### Extension callback -- add the versioning instance variables to the
+		### extending object.
+		def self::extended( object )
+			object.instance_variable_set( :@data_version, 0 )
+			object.instance_variable_set( :@structure_version, 0 )
+			super
+		end
+
+		#
+		# Instance methods
+		#
+
 		### Set up versioning data
 		def initialize( *args )
 			@data_version      = 0
 			@structure_version = 0
+			super
 		end
 
 
@@ -115,6 +130,7 @@ module Verse
 		### that include this mixin.
 		def inspect
 			rval = super
+			return rval unless self.structure_version
 			vstring = "%d.%d" % [ self.structure_version, self.data_version ]
 			return rval.sub( />$/, "; version: #{vstring}>" )
 		end
@@ -124,6 +140,8 @@ module Verse
 
 	### A mixin for making Verse objects observable.
 	module Observable
+		include Verse::Versioned,
+		        Verse::Loggable
 
 		### Set up observable data structures.
 		def initialize( *args )
@@ -147,6 +165,7 @@ module Verse
 		### @param [Observer] observer  the object that would like to be notified about 
 		###                             changes in the receiver.
 		def add_observer( observer )
+			self.log.debug "%p: adding observer %p" % [ self, observer ]
 			@observers << observer unless @observers.include?( observer )
 		end
 
@@ -156,6 +175,7 @@ module Verse
 		### @param [Observer] observer   the object that is no longer interested in being
 		###                              notified about changes in the receiver.
 		def remove_observer( observer )
+			self.log.debug "%p: removing observer %p" % [ self, observer ]
 			@observers.delete( observer )
 		end
 
@@ -192,7 +212,7 @@ module Verse
 	end # module Observer
 
 
-	### A mixin for objects which wish to handle 'ping' events.
+	### A mixin for objects which wish to observe ping events.
 	module PingObserver
 		include Verse::Loggable,
 		        Verse::Observer
@@ -208,7 +228,7 @@ module Verse
 	end # PingObserver
 
 
-	### A mixin for objects which wish to handle 'connect' and 'connect_terminate' events.
+	### A mixin for objects which wish to observe Verse connection events.
 	module ConnectionObserver
 		include Verse::Loggable,
 		        Verse::Observer
@@ -223,9 +243,29 @@ module Verse
 			self.log.debug "unhandled on_connect: '%s' connected from '%s'" % [ user, address ]
 		end
 
+	end # module ConnectionObserver
 
-		### Called when a Verse client notifies the server that it wishes to terminate
-		### communication.
+
+	### A mixin for objects which wish to observe events on a Verse::Session.
+	module SessionObserver
+		include Verse::Loggable,
+		        Verse::Observer
+
+		### Called when a Verse server accepts a connection from a Verse::Session.
+		### 
+		### @param [Verse::Node]  avatar   the node in the object graph assigned by the server
+		###                                to the session
+		### @param [String]       address  the address (in "<ipaddr>:<port>" form) of the
+		###                                accepting server
+		### @param [String]       hostid   the server's key, which can be used to verify its
+		###                                identity when reconnecting later
+		def on_connect_accept( avatar, address, hostid )
+			self.log.debug "unhandled on_connect_accept: connection accepted from '%s' (%s)" %
+				[ address, hostid ]
+		end
+
+
+		### Called when a Verse server notifies a client that it's terminating its connection.
 		### 
 		### @param [String]  address  the address of the terminating client
 		### @param [String]  message  the termination message
@@ -234,7 +274,19 @@ module Verse
 				[ address, message ]
 		end
 
-	end
+
+		### Called when a new node is created (or indexed) on the server.
+		def on_node_create( node )
+			self.log.debug "unhandled on_node_create for %p" % [ node ]
+		end
+
+
+		### Called when a node is destroyed on the server.
+		def on_node_destroy( node )
+			self.log.debug "unhandled on_node_destroy for %p" % [ node ]
+		end
+
+	end # module SessionObserver
 
 
 end # module Verse

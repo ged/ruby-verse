@@ -39,6 +39,6 @@ if $0 == __FILE__
 	lister = NodeLister.new
 	session.add_observer( lister )
 
-	Verse.update until session.terminated?
+	Verse::Session.update until session.terminated?
 end
 
