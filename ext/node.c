@@ -40,6 +40,7 @@
 #include "verse_ext.h"
 
 VALUE rbverse_cVerseNode;
+VALUE rbverse_mVerseNodeObserver;
 
 /* Mapping of V_NT_* enum to the equivalent Verse::Node subclass */
 VALUE rbverse_nodetype_to_nodeclass[ V_NT_NUM_TYPES ];
@@ -49,8 +50,14 @@ static st_table *node_map;
 
 /* Vtables for mark and free functions for child types. These are
  * populated by the initializers for each of the child types. */
-void ( *node_mark_funcs[V_NT_NUM_TYPES] )(rbverse_NODE *) = {};
-void ( *node_free_funcs[V_NT_NUM_TYPES] )(rbverse_NODE *) = {};
+void ( *node_mark_funcs[V_NT_NUM_TYPES] )(struct rbverse_node *) = {};
+void ( *node_free_funcs[V_NT_NUM_TYPES] )(struct rbverse_node *) = {};
+
+/* Structs for passing callback data back into Ruby */
+struct rbverse_node_name_set_event {
+	VNodeID node_id;
+	const char *name;
+};
 
 
 /* --------------------------------------------------
@@ -60,11 +67,11 @@ void ( *node_free_funcs[V_NT_NUM_TYPES] )(rbverse_NODE *) = {};
 /*
  * Allocation function
  */
-static rbverse_NODE *
+static struct rbverse_node *
 rbverse_node_alloc( void ) {
-	rbverse_NODE *ptr = ALLOC( rbverse_NODE );
+	struct rbverse_node *ptr = ALLOC( struct rbverse_node );
 
-	ptr->id         = 0;
+	ptr->id         = ~0;
 	ptr->type       = V_NT_SYSTEM;
 	ptr->owner      = VN_OWNER_OTHER;
 	ptr->name       = Qnil;
@@ -80,15 +87,18 @@ rbverse_node_alloc( void ) {
  * GC Mark function
  */
 static void
-rbverse_node_gc_mark( rbverse_NODE *ptr ) {
+rbverse_node_gc_mark( struct rbverse_node *ptr ) {
 	if ( ptr ) {
 		rb_gc_mark( ptr->name );
 		rb_gc_mark( ptr->tag_groups );
 		rb_gc_mark( ptr->session );
 
 		/* Call the node-specific mark function if there is one */
-		if ( node_mark_funcs[ptr->type] )
+		if ( node_mark_funcs[ptr->type] ) {
+			DEBUGMSG( "  mark function 0x%p for node type %d",
+			        node_mark_funcs[ptr->type], ptr->type );
 			node_mark_funcs[ptr->type]( ptr );
+		}
 	}
 }
 
@@ -98,18 +108,25 @@ rbverse_node_gc_mark( rbverse_NODE *ptr ) {
  * GC Free function
  */
 static void
-rbverse_node_gc_free( rbverse_NODE *ptr ) {
+rbverse_node_gc_free( struct rbverse_node *ptr ) {
 	if ( ptr ) {
-		if ( ptr->id ) {
+		DEBUGMSG( "Freeing node 0x%p\n", ptr );
+
+		if ( ptr->id != ~0 ) {
+			DEBUGMSG( "  removing node ID %d from node map\n", ptr->id );
 			st_delete_safe( node_map, (st_data_t*)&ptr->id, 0, Qundef );
 			/* TODO: Do I need to do st_cleanup or anything after deletion? */
 		}
 
 		/* Call the node-specific free function if there is one */
-		if ( node_free_funcs[ptr->type] )
+		if ( ptr->type < V_NT_NUM_TYPES ) {
+			DEBUGMSG( "  free function %p for node type %d\n",
+			        node_free_funcs[ptr->type], ptr->type );
 			node_free_funcs[ptr->type]( ptr );
+		}
 
-		ptr->id         = 0;
+		DEBUGMSG( "  clearing struct.\n" );
+		ptr->id         = ~0;
 		ptr->type       = V_NT_SYSTEM;
 		ptr->owner      = VN_OWNER_OTHER;
 		ptr->name       = Qnil;
@@ -118,6 +135,8 @@ rbverse_node_gc_free( rbverse_NODE *ptr ) {
 
 		xfree( ptr );
 		ptr = NULL;
+
+		DEBUGMSG( "  done.\n" );
 	}
 }
 
@@ -125,7 +144,7 @@ rbverse_node_gc_free( rbverse_NODE *ptr ) {
 /*
  * Object validity checker. Returns the data pointer.
  */
-static rbverse_NODE *
+static struct rbverse_node *
 rbverse_check_node( VALUE self ) {
 	Check_Type( self, T_DATA );
 
@@ -142,9 +161,9 @@ rbverse_check_node( VALUE self ) {
  * Fetch the data pointer and check it for sanity. Not static because
  * Verse::Node's children use it as well.
  */
-rbverse_NODE *
+struct rbverse_node *
 rbverse_get_node( VALUE self ) {
-	rbverse_NODE *node = rbverse_check_node( self );
+	struct rbverse_node *node = rbverse_check_node( self );
 
 	if ( !node )
 		rb_fatal( "Use of uninitialized Node." );
@@ -152,6 +171,16 @@ rbverse_get_node( VALUE self ) {
 	return node;
 }
 
+
+/*
+ * Return the Verse::Node subclass that corresponds to the specified
+ * +node_type+.
+ */
+VALUE
+rbverse_node_class_from_node_type( VNodeType node_type ) {
+	if ( node_type >= V_NT_NUM_TYPES ) return Qnil;
+	return rbverse_nodetype_to_nodeclass[ node_type ];
+}
 
 
 /*
@@ -161,7 +190,7 @@ VALUE
 rbverse_wrap_verse_node( VNodeID node_id, VNodeType node_type, VNodeOwner owner ) {
 	VALUE node_class = rbverse_nodetype_to_nodeclass[ node_type ];
 	VALUE node = Qnil;
-	rbverse_NODE *ptr = NULL;
+	struct rbverse_node *ptr = NULL;
 
 	rbverse_log( "debug", "Wrapping a %s object around node %x",
 	             rb_class2name(node_class), node_id );
@@ -201,7 +230,7 @@ rbverse_lookup_verse_node( VNodeID node_id ) {
  */
 void
 rbverse_mark_node_destroyed( VALUE nodeobj ) {
-	rbverse_NODE *node = rbverse_get_node( nodeobj );
+	struct rbverse_node *node = rbverse_get_node( nodeobj );
 
 	rbverse_log_with_context( nodeobj, "debug", "Marking node %x destroyed.", node->id );
 	node->destroyed = TRUE;
@@ -213,7 +242,7 @@ rbverse_mark_node_destroyed( VALUE nodeobj ) {
  * of a session or has been destroyed.
  */
 static inline void
-rbverse_ensure_node_is_alive( rbverse_NODE *node ) {
+rbverse_ensure_node_is_alive( struct rbverse_node *node ) {
 	if ( !node )
 		rb_fatal( "node pointer was NULL!" );
 	if ( !RTEST(node->session) )
@@ -237,6 +266,8 @@ rbverse_ensure_node_is_alive( rbverse_NODE *node ) {
  */
 static VALUE
 rbverse_verse_node_s_allocate( VALUE klass ) {
+	if ( klass == rbverse_cVerseNode )
+		rb_raise( rb_eTypeError, "can't instantiate %s directly", rb_class2name(klass) );
 	return Data_Wrap_Struct( klass, rbverse_node_gc_mark, rbverse_node_gc_free, 0 );
 }
 
@@ -256,7 +287,7 @@ rbverse_verse_node_s_allocate( VALUE klass ) {
 static VALUE
 rbverse_verse_node_initialize( VALUE self ) {
 	if ( !rbverse_check_node(self) ) {
-		rbverse_NODE *node;
+		struct rbverse_node *node;
 
 		DATA_PTR( self ) = node = rbverse_node_alloc();
 
@@ -279,7 +310,7 @@ rbverse_verse_node_initialize( VALUE self ) {
  */
 static VALUE
 rbverse_verse_node_add_observer( VALUE self, VALUE observer ) {
-	rbverse_NODE *node = rbverse_get_node( self );
+	struct rbverse_node *node = rbverse_get_node( self );
 
 	verse_send_node_subscribe( node->id );
 
@@ -318,7 +349,7 @@ rbverse_verse_node_destroy_l( VALUE nodeid ) {
  */
 static VALUE
 rbverse_verse_node_destroy( VALUE self ) {
-	rbverse_NODE *node = rbverse_get_node( self );
+	struct rbverse_node *node = rbverse_get_node( self );
 
 	rbverse_ensure_node_is_alive( node );
 	rbverse_with_session_lock( node->session, rbverse_verse_node_destroy_l, (VALUE)node->id );
@@ -336,7 +367,7 @@ rbverse_verse_node_destroy( VALUE self ) {
  */
 static VALUE
 rbverse_verse_node_destroyed_p( VALUE self ) {
-	rbverse_NODE *node = rbverse_get_node( self );
+	struct rbverse_node *node = rbverse_get_node( self );
 	return node->destroyed ? Qtrue : Qfalse;
 }
 
@@ -350,15 +381,45 @@ rbverse_verse_node_destroyed_p( VALUE self ) {
  */
 static VALUE
 rbverse_verse_node_session( VALUE self ) {
-	rbverse_NODE *node = rbverse_get_node( self );
+	struct rbverse_node *node = rbverse_get_node( self );
 	return node->session;
 }
 
 
+/*
+ * call-seq:
+ *    node.id   -> Fixnum
+ *
+ * Return the node's numeric ID.
+ *
+ */
+static VALUE
+rbverse_verse_node_id( VALUE self ) {
+	struct rbverse_node *node = rbverse_get_node( self );
+	return INT2FIX( node->id );
+}
 
-/* --------------------------------------------------------------
- * Protected Instance Methods
- * -------------------------------------------------------------- */
+
+/*
+ * call-seq:
+ *    node.id = fixnum
+ *
+ * Set the node's numeric ID.
+ * 
+ * @raise [Verse::NodeError]  if the node's ID has already been set.
+ */
+static VALUE
+rbverse_verse_node_id_eq( VALUE self, VALUE newid ) {
+	struct rbverse_node *node = rbverse_get_node( self );
+
+	if ( node->id != ~0 )
+		rb_raise( rbverse_eVerseNodeError, "node's ID is already set" );
+
+	node->id = NUM2UINT( newid );
+
+	return Qtrue;
+}
+
 
 /*
  * call-seq:
@@ -370,7 +431,7 @@ rbverse_verse_node_session( VALUE self ) {
  */
 static VALUE
 rbverse_verse_node_session_eq( VALUE self, VALUE session ) {
-	rbverse_NODE *node = rbverse_get_node( self );
+	struct rbverse_node *node = rbverse_get_node( self );
 
 	if ( RTEST(node->session) )
 		rb_raise( rbverse_eVerseSessionError, "%s already belongs to a session", 
@@ -387,6 +448,93 @@ rbverse_verse_node_session_eq( VALUE self, VALUE session ) {
 
 
 
+/* --------------------------------------------------------------
+ * Callbacks
+ * -------------------------------------------------------------- */
+
+/*
+ * Iterator body for node_name_set observers.
+ */
+static VALUE
+rbverse_cb_node_name_set_i( VALUE observer, VALUE node, int argc, VALUE *argv ) {
+	const VALUE name = argv[0];
+	VALUE cb_args = rb_ary_new2( 2 );
+
+	if ( !rb_obj_is_kind_of(observer, rbverse_mVerseNodeObserver) )
+		return Qnil;
+
+	RARRAY_PTR( cb_args )[0] = node;
+	RARRAY_PTR( cb_args )[1] = name;
+
+	rbverse_log( "debug", "Node_name_set callback: notifying observer: %s.",
+	             RSTRING_PTR(rb_inspect( observer )) );
+	return rb_funcall2( observer, rb_intern("on_node_name_set"), RARRAY_LEN(cb_args),
+	                    RARRAY_PTR(cb_args) );
+}
+
+
+/*
+ * Call the node_name_set handler after aqcuiring the GVL.
+ */
+static void *
+rbverse_cb_node_name_set_body( void *ptr ) {
+	struct rbverse_node_name_set_event *event = (struct rbverse_node_name_set_event *)ptr;
+	const VALUE node = rbverse_lookup_verse_node( event->node_id );
+	VALUE name = rb_str_new2( event->name );
+	VALUE observers;
+
+	if ( RTEST(node) ) {
+		rbverse_log( "info", "Got node name '%s' for %p.", event->name,
+		             RSTRING_PTR(rb_inspect(node)) );
+
+		observers = rb_funcall( node, rb_intern("observers"), 0 );
+		rb_block_call( observers, rb_intern("each"), 1, &name, rbverse_cb_node_name_set_i, node );
+
+	} else {
+		rbverse_log( "info", "Got node name for a node we haven't loaded (%d)", event->node_id );
+	}
+
+	return NULL;
+}
+
+
+/* 
+ * Callback for the 'node_name_set' command
+ */
+static void
+rbverse_cb_node_name_set( void *unused, VNodeID node_id, const char *name ) {
+	struct rbverse_node_name_set_event event;
+
+	event.node_id = node_id;
+	event.name = name;
+
+	DEBUGMSG( " Acquiring GVL for 'node_name_set' event.\n" );
+	fflush( stdout );
+
+	rb_thread_call_with_gvl( rbverse_cb_node_name_set_body, (void *)&event );
+}
+
+
+// static void
+// rbverse_cb_node_tag_group_create( void *unused ) {}
+// 
+// static void
+// rbverse_cb_node_tag_group_destroy( void *unused ) {}
+// 
+// static void
+// rbverse_cb_node_tag_group_subscribe( void *unused ) {}
+// 
+// static void
+// rbverse_cb_node_tag_group_unsubscribe( void *unused ) {}
+// 
+// static void
+// rbverse_cb_node_tag_create( void *unused ) {}
+// 
+// static void
+// rbverse_cb_node_tag_destroy( void *unused ) {}
+
+
+
 /*
  * Verse::Node class
  */
@@ -398,6 +546,10 @@ rbverse_init_verse_node( void ) {
 	rbverse_mVerse = rb_define_module( "Verse" );
 #endif
 
+	/* Related modules */
+	rbverse_mVerseNodeObserver = rb_define_module_under( rbverse_mVerse, "NodeObserver" );
+
+	/* VNodeID -> Ruby object lookup table */
 	node_map = st_init_numtable();
 
 	rbverse_cVerseNode = rb_define_class_under( rbverse_mVerse, "Node", rb_cObject );
@@ -408,7 +560,6 @@ rbverse_init_verse_node( void ) {
 
 	/* Class methods */
 	rb_define_alloc_func( rbverse_cVerseNode, rbverse_verse_node_s_allocate );
-	rb_undef_method( CLASS_OF(rbverse_cVerseNode), "new" );
 
 	/* Initializer */
 	rb_define_method( rbverse_cVerseNode, "initialize", rbverse_verse_node_initialize, 0 );
@@ -420,6 +571,9 @@ rbverse_init_verse_node( void ) {
 	rb_define_method( rbverse_cVerseNode, "destroyed?", rbverse_verse_node_destroyed_p, 0 );
 
 	rb_define_method( rbverse_cVerseNode, "session", rbverse_verse_node_session, 0 );
+
+	rb_define_method( rbverse_cVerseNode, "id", rbverse_verse_node_id, 0 );
+	rb_define_method( rbverse_cVerseNode, "id=", rbverse_verse_node_id_eq, 1 );
 
 	/* Protected instance methods */
 	rb_define_protected_method( rbverse_cVerseNode, "session=", rbverse_verse_node_session_eq, 1 );
@@ -434,12 +588,20 @@ rbverse_init_verse_node( void ) {
 	rbverse_init_verse_curvenode();
 	rbverse_init_verse_audionode();
 
-	// verse_callback_set( verse_send_node_name_set, rbverse_node_name_set_callback, NULL );
-	// verse_callback_set( verse_send_tag_group_create, rbverse_tag_group_create_callback, NULL );
-	// verse_callback_set( verse_send_tag_group_destroy, rbverse_tag_group_destroy_callback, NULL );
-	// verse_callback_set( verse_send_tag_group_subscribe, rbverse_tag_group_subscribe_callback, NULL );
-	// verse_callback_set( verse_send_tag_group_unsubscribe, rbverse_tag_group_unsubscribe_callback, NULL );
-	// verse_callback_set( verse_send_tag_create, rbverse_tag_create_callback, NULL );
-	// verse_callback_set( verse_send_tag_destroy, rbverse_tag_destroy_callback, NULL );
+	// DEBUGMSG( "Free function for ObjectNode (%d) is: %p\n", V_NT_OBJECT, node_free_funcs[V_NT_OBJECT] );
+	// DEBUGMSG( "Free function for GeometryNode (%d) is: %p\n", V_NT_GEOMETRY, node_free_funcs[V_NT_GEOMETRY] );
+	// DEBUGMSG( "Free function for MaterialNode (%d) is: %p\n", V_NT_MATERIAL, node_free_funcs[V_NT_MATERIAL] );
+	// DEBUGMSG( "Free function for TextNode (%d) is: %p\n", V_NT_TEXT, node_free_funcs[V_NT_TEXT] );
+	// DEBUGMSG( "Free function for BitmapNode (%d) is: %p\n", V_NT_BITMAP, node_free_funcs[V_NT_BITMAP] );
+	// DEBUGMSG( "Free function for CurveNode (%d) is: %p\n", V_NT_CURVE, node_free_funcs[V_NT_CURVE] );
+	// DEBUGMSG( "Free function for AudioNode (%d) is: %p\n", V_NT_AUDIO, node_free_funcs[V_NT_AUDIO] );
+
+	verse_callback_set( verse_send_node_name_set, rbverse_cb_node_name_set, NULL );
+	// verse_callback_set( verse_send_tag_group_create, rbverse_cb_node_tag_group_create, NULL );
+	// verse_callback_set( verse_send_tag_group_destroy, rbverse_cb_node_tag_group_destroy, NULL );
+	// verse_callback_set( verse_send_tag_group_subscribe, rbverse_cb_node_tag_group_subscribe, NULL );
+	// verse_callback_set( verse_send_tag_group_unsubscribe, rbverse_cb_node_tag_group_unsubscribe, NULL );
+	// verse_callback_set( verse_send_tag_create, rbverse_cb_node_tag_create, NULL );
+	// verse_callback_set( verse_send_tag_destroy, rbverse_cb_node_tag_destroy, NULL );
 }
 

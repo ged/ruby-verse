@@ -180,7 +180,7 @@ module Verse
 
 
 		### Remove all current observers.
-		### @returns [Array<Verse::Observer>]  the observers that were removed
+		### @return [Array<Verse::Observer>]  the observers that were removed
 		def remove_observers
 			@observers.collect {|observer| self.remove_observer(observer) }
 		end
@@ -203,7 +203,7 @@ module Verse
 		### Remove the receiver from the list of interested observers from
 		### the given +objects+.
 		### 
-		### @params [Array<Observable>] objects the objects to no longer observe.
+		### @param [Array<Observable>] objects the objects to no longer observe.
 		def stop_observing( *objects )
 			objects.each {|obj| obj.remove_observer(self) }
 		end
@@ -242,6 +242,21 @@ module Verse
 			self.log.debug "unhandled on_connect: '%s' connected from '%s'" % [ user, address ]
 		end
 
+
+		### Called when a Verse client requests subscriptions to create/destroy events
+		### for the specified node +classes+.
+		### 
+		### @param [Array<Class>] classes  the Verse::Node classes to subscribe to.
+		def on_node_index_subscribe( *classes )
+			classes.flatten!
+			if classes.empty?
+				self.log.debug "unhandled node_index_subscribe: clear subscriptions"
+			else
+				self.log.debug "unhandled node_index_subscribe: classes: %s" %
+					[ classes.collect {|kl| kl.name }.join(', ') ]
+			end
+		end
+
 	end # module ConnectionObserver
 
 
@@ -269,7 +284,7 @@ module Verse
 		### @param [String]  address  the address of the terminating client
 		### @param [String]  message  the termination message
 		def on_connect_terminate( address, message )
-			self.log.debug "unhandled on_connect_terminate: '%s' terminated communication: %s" % 
+			self.log.debug "unhandled on_connect_terminate: '%s' terminated communication: %s" %
 				[ address, message ]
 		end
 
@@ -287,6 +302,71 @@ module Verse
 
 	end # module SessionObserver
 
+
+	### A mixin for objects which wish to observe events on a Verse::Node.
+	module NodeObserver
+		include Verse::Loggable,
+		        Verse::Observer
+
+		### Called when the verse server sets the node's name.
+		### 
+		### @param [Verse::Node] node  the node that has just had its name set/changed.
+		### @param [String] name       the node's new name.
+		def on_node_name_set( node, name )
+			self.log.debug "unhandled on_node_name_set: %p is now named %p" % [ node, name ]
+		end
+
+		### Called when a new +tag_group+ is created for the +node+.
+		### 
+		### @param [Verse::Node] node                 the node the tag group belongs to
+		### @param [Verse::Node::TagGroup] tag_group  the new tag group
+		def on_tag_group_create( node, tag_group )
+			self.log.debug "unhandled on_tag_group_create: node %p now has tag group %p" %
+			 	[ node, tag_group ]
+		end
+
+		### Called when a +tag_group+ is destroyed.
+		### 
+		### @param [Verse::Node] node                 the node the tag group used to belong to.
+		### @param [Verse::Node::TagGroup] tag_group  the tag group that has been destroyed.
+		def on_tag_group_destroy( node, tag_group )
+			self.log.debug "unhandled on_tag_group_destroy: node %p no longer has tag group %p" %
+			 	[ node, tag_group ]
+		end
+
+		### Called when the verse server sets the node's name.
+		### 
+		### @param [Verse::Node] node  the node that has just had its name set/changed.
+		### @param [String] name       the node's new name.
+		def on_tag_group_subscribe( node )
+			self.log.debug "unhandled on_node_destroy for %p" % [ node ]
+		end
+
+		### Called when the verse server sets the node's name.
+		### 
+		### @param [Verse::Node] node  the node that has just had its name set/changed.
+		### @param [String] name       the node's new name.
+		def on_tag_group_unsubscribe( node )
+			self.log.debug "unhandled on_node_destroy for %p" % [ node ]
+		end
+
+		### Called when the verse server sets the node's name.
+		### 
+		### @param [Verse::Node] node  the node that has just had its name set/changed.
+		### @param [String] name       the node's new name.
+		def on_tag_create( node )
+			self.log.debug "unhandled on_node_destroy for %p" % [ node ]
+		end
+
+		### Called when the verse server sets the node's name.
+		### 
+		### @param [Verse::Node] node  the node that has just had its name set/changed.
+		### @param [String] name       the node's new name.
+		def on_tag_destroy( node )
+			self.log.debug "unhandled on_node_destroy for %p" % [ node ]
+		end
+
+	end
 
 end # module Verse
 

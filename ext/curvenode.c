@@ -46,7 +46,7 @@ VALUE rbverse_cVerseCurveNode;
  * Mark the curve part of a node.
  */
 static void
-rbverse_curvenode_gc_mark( rbverse_NODE *ptr ) {
+rbverse_curvenode_gc_mark( struct rbverse_node *ptr ) {
 	if ( ptr ) {
 		/* TODO: Mark child-specific data */
 	}
@@ -57,7 +57,7 @@ rbverse_curvenode_gc_mark( rbverse_NODE *ptr ) {
  * Free the curve part of a node.
  */
 static void
-rbverse_curvenode_gc_free( rbverse_NODE *ptr ) {
+rbverse_curvenode_gc_free( struct rbverse_node *ptr ) {
 	if ( ptr ) {
 		/* TODO: Free child-specific data */
 	}
@@ -76,11 +76,12 @@ rbverse_curvenode_gc_free( rbverse_NODE *ptr ) {
  */
 static VALUE
 rbverse_verse_curvenode_initialize( VALUE self ) {
-	rbverse_NODE *ptr;
+	struct rbverse_node *ptr;
 
 	rb_call_super( 0, NULL );
 
 	ptr = rbverse_get_node( self );
+	ptr->type = V_NT_CURVE;
 
 	/* TODO: Initialize curve-specific instance data. */
 
@@ -97,6 +98,9 @@ rbverse_init_verse_curvenode( void ) {
 
 	/* Class methods */
 	rbverse_cVerseCurveNode = rb_define_class_under( rbverse_mVerse, "CurveNode", rbverse_cVerseNode );
+
+    /* Constants */
+	rb_define_const( rbverse_cVerseCurveNode, "TYPE_NUMBER", INT2FIX(V_NT_CURVE) );
 
 	/* Initializer */
 	rb_define_method( rbverse_cVerseCurveNode, "initialize", rbverse_verse_curvenode_initialize, 0 );

@@ -11,16 +11,21 @@
 #include <inttypes.h>
 #include <math.h>
 
-#include <verse.h>
+#include "verse.h"
 
 #include "ruby.h"
 #ifndef RUBY_VM
 #	error Ruby-Verse requires at least Ruby 1.9.1
 #else
-#	include "ruby/intern.h"
 #	include "ruby/encoding.h"
 #	include "ruby/st.h"
 #endif /* !RUBY_VM */
+
+#ifdef DEBUG
+#	define DEBUGMSG(format, args...) fprintf( stderr, "\033[31m"format"\033[0m", ##args );
+#else
+#	define DEBUGMSG(format, args...)
+#endif
 
 /* Missing declarations of "experimental" thread functions from ruby/thread.c */
 void * rb_thread_call_with_gvl(void *(*)(void *), void *);
@@ -42,7 +47,9 @@ extern VALUE rbverse_mVerseObservable;
 extern VALUE rbverse_mVersePingObserver;
 extern VALUE rbverse_mVerseConnectionObserver;
 extern VALUE rbverse_mVerseSessionObserver;
+extern VALUE rbverse_mVerseNodeObserver;
 
+extern VALUE rbverse_cVerseServer;
 extern VALUE rbverse_cVerseSession;
 extern VALUE rbverse_cVerseNode;
 
@@ -64,27 +71,15 @@ extern VALUE rbverse_eVerseNodeError;
  * Typedefs
  * -------------------------------------------------------------- */
 
-/* Struct for carrying parameters across an rb_thread_call_with_gvl() */
-typedef struct rbverse_connect_accept_event {
-	VNodeID		    avatar;
-	const char	    *address;
-	uint8		    *hostid;
-} rbverse_CONNECT_ACCEPT_EVENT;
-
-typedef struct rbverse_node_create_event {
-	VNodeID node_id;
-	VNodeType type;
-	VNodeOwner owner;
-} rbverse_NODE_CREATE_EVENT;
-
 /* Class structures */
-typedef struct rbverse_session {
+struct rbverse_session {
 	VSession id;
-	VALUE    self;
 	VALUE    address;
-} rbverse_SESSION;
+	VALUE    create_callbacks;
+	VALUE    destroy_callbacks;
+};
 
-typedef struct rbverse_node {
+struct rbverse_node {
 	VNodeID		id;
 	VNodeType	type;
 	VNodeOwner	owner;
@@ -106,14 +101,14 @@ typedef struct rbverse_node {
 			VALUE streams;
 		} audio;
 	};
-} rbverse_NODE;
+};
 
 
 /* Verse::Node globals. These are used to hook up child classes into
  * Verse::Node's memory-management and node-creation functions. */
 extern VALUE rbverse_nodetype_to_nodeclass[];
-extern void ( *node_mark_funcs[] )(rbverse_NODE *);
-extern void ( *node_free_funcs[] )(rbverse_NODE *);
+extern void ( *node_mark_funcs[] )(struct rbverse_node *);
+extern void ( *node_free_funcs[] )(struct rbverse_node *);
 
 
 
@@ -121,6 +116,7 @@ extern void ( *node_free_funcs[] )(rbverse_NODE *);
  * Macros
  * -------------------------------------------------------------- */
 #define IsSession( obj ) rb_obj_is_kind_of( (obj), rbverse_cVerseSession )
+#define IsServer( obj ) rb_obj_is_kind_of( (obj), rbverse_cVerseServer )
 
 #define IsNode( obj ) rb_obj_is_kind_of( (obj), rbverse_cVerseNode )
 #define IsAudioNode( obj ) rb_obj_is_kind_of( (obj), rbverse_cVerseAudioNode )
@@ -160,10 +156,11 @@ extern VALUE rbverse_with_session_lock				_(( VALUE, VALUE (*)(ANYARGS), VALUE )
 extern VALUE rbverse_verse_session_from_vsession	_(( VSession, VALUE ));
 
 /* node.c */
+extern VALUE rbverse_node_class_from_node_type		_(( VNodeType  ));
 extern VALUE rbverse_wrap_verse_node				_(( VNodeID, VNodeType, VNodeOwner ));
 extern VALUE rbverse_lookup_verse_node				_(( VNodeID ));
 extern void rbverse_mark_node_destroyed				_(( VALUE ));
-extern rbverse_NODE * rbverse_get_node				_(( VALUE ));
+extern struct rbverse_node * rbverse_get_node				_(( VALUE ));
 
 
 /* --------------------------------------------------------------
@@ -172,6 +169,7 @@ extern rbverse_NODE * rbverse_get_node				_(( VALUE ));
 
 void Init_verse_ext( void );
 
+extern void rbverse_init_verse_server       _(( void ));
 extern void rbverse_init_verse_session      _(( void ));
 extern void rbverse_init_verse_mixins       _(( void ));
 

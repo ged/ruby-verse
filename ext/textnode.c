@@ -46,7 +46,7 @@ VALUE rbverse_cVerseTextNode;
  * Mark the text part of a node.
  */
 static void
-rbverse_textnode_gc_mark( rbverse_NODE *ptr ) {
+rbverse_textnode_gc_mark( struct rbverse_node *ptr ) {
 	if ( ptr ) {
 		/* TODO: Mark child-specific data */
 	}
@@ -57,7 +57,7 @@ rbverse_textnode_gc_mark( rbverse_NODE *ptr ) {
  * Free the text part of a node.
  */
 static void
-rbverse_textnode_gc_free( rbverse_NODE *ptr ) {
+rbverse_textnode_gc_free( struct rbverse_node *ptr ) {
 	if ( ptr ) {
 		/* TODO: Free child-specific data */
 	}
@@ -76,11 +76,12 @@ rbverse_textnode_gc_free( rbverse_NODE *ptr ) {
  */
 static VALUE
 rbverse_verse_textnode_initialize( VALUE self ) {
-	rbverse_NODE *ptr;
+	struct rbverse_node *ptr;
 
 	rb_call_super( 0, NULL );
 
 	ptr = rbverse_get_node( self );
+	ptr->type = V_NT_TEXT;
 
 	/* TODO: Initialize text-specific instance data. */
 
@@ -97,6 +98,9 @@ rbverse_init_verse_textnode( void ) {
 
 	/* Class methods */
 	rbverse_cVerseTextNode = rb_define_class_under( rbverse_mVerse, "TextNode", rbverse_cVerseNode );
+
+    /* Constants */
+	rb_define_const( rbverse_cVerseTextNode, "TYPE_NUMBER", INT2FIX(V_NT_TEXT) );
 
 	/* Initializer */
 	rb_define_method( rbverse_cVerseTextNode, "initialize", rbverse_verse_textnode_initialize, 0 );

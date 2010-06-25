@@ -46,7 +46,7 @@ VALUE rbverse_cVerseAudioNode;
  * Mark the audio part of a node.
  */
 static void
-rbverse_audionode_gc_mark( rbverse_NODE *ptr ) {
+rbverse_audionode_gc_mark( struct rbverse_node *ptr ) {
 	if ( ptr ) {
 		rb_gc_mark( ptr->audio.buffers );
 		rb_gc_mark( ptr->audio.streams );
@@ -58,7 +58,7 @@ rbverse_audionode_gc_mark( rbverse_NODE *ptr ) {
  * Free the audio part of a node.
  */
 static void
-rbverse_audionode_gc_free( rbverse_NODE *ptr ) {
+rbverse_audionode_gc_free( struct rbverse_node *ptr ) {
 	if ( ptr ) {
 		ptr->audio.buffers = Qnil;
 		ptr->audio.streams = Qnil;
@@ -78,11 +78,12 @@ rbverse_audionode_gc_free( rbverse_NODE *ptr ) {
  */
 static VALUE
 rbverse_verse_audionode_initialize( VALUE self ) {
-	rbverse_NODE *ptr;
+	struct rbverse_node *ptr;
 
 	rb_call_super( 0, NULL );
 
 	ptr = rbverse_get_node( self );
+	ptr->type = V_NT_AUDIO;
 
 	ptr->audio.buffers = rb_ary_new();
 	ptr->audio.streams = rb_ary_new();

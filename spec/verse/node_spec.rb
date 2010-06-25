@@ -35,13 +35,27 @@ describe Verse::Node do
 
 
 	it "is an abstract class" do
-		expect { Verse::Node.new }.to raise_exception( NoMethodError, /undefined method/ )
+		expect { Verse::Node.new }.to raise_exception( TypeError, /can't instantiate/i )
 	end
 
 
 	describe "concrete subclasses" do
 
-		it "can be created on the server"
+		before( :each ) do
+			@nodeclass = Class.new( Verse::Node )
+			@node = @nodeclass.new
+		end
+
+		it "raises an exception if its ID is set twice" do
+			@node.id = 13
+			expect {
+				@node.id = 131
+			}.to raise_exception( Verse::NodeError, /already set/ )
+		end
+
+		it "can be created on the server" do
+			
+		end
 
 		it "can be destroyed"
 

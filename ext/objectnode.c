@@ -46,9 +46,14 @@ VALUE rbverse_cVerseObjectNode;
  * Mark the object part of a node.
  */
 static void
-rbverse_objectnode_gc_mark( rbverse_NODE *ptr ) {
+rbverse_objectnode_gc_mark( struct rbverse_node *ptr ) {
 	if ( ptr ) {
-		/* TODO: Mark child-specific data */
+		rb_gc_mark( ptr->object.links );
+		rb_gc_mark( ptr->object.links );
+		rb_gc_mark( ptr->object.transform );
+		rb_gc_mark( ptr->object.light );
+		rb_gc_mark( ptr->object.method_groups );
+		rb_gc_mark( ptr->object.animations );
 	}
 }
 
@@ -57,9 +62,13 @@ rbverse_objectnode_gc_mark( rbverse_NODE *ptr ) {
  * Free the object part of a node.
  */
 static void
-rbverse_objectnode_gc_free( rbverse_NODE *ptr ) {
+rbverse_objectnode_gc_free( struct rbverse_node *ptr ) {
 	if ( ptr ) {
-		/* TODO: Free child-specific data */
+		ptr->object.links         = Qnil;
+		ptr->object.transform     = Qnil;
+		ptr->object.light         = Qnil;
+		ptr->object.method_groups = Qnil;
+		ptr->object.animations    = Qnil;
 	}
 }
 
@@ -76,13 +85,18 @@ rbverse_objectnode_gc_free( rbverse_NODE *ptr ) {
  */
 static VALUE
 rbverse_verse_objectnode_initialize( VALUE self ) {
-	rbverse_NODE *ptr;
+	struct rbverse_node *ptr;
 
 	rb_call_super( 0, NULL );
 
 	ptr = rbverse_get_node( self );
+	ptr->type = V_NT_OBJECT;
 
-	/* TODO: Initialize object-specific instance data. */
+	ptr->object.links         = Qnil;
+	ptr->object.transform     = Qnil;
+	ptr->object.light         = Qnil;
+	ptr->object.method_groups = Qnil;
+	ptr->object.animations    = Qnil;
 
 	return self;
 }

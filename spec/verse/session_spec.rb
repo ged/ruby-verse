@@ -66,14 +66,6 @@ describe Verse::Session do
 		Verse::Session.all_connected.should_not include( session2 )
 	end
 
-	it "can synchronize via a global session mutex to avoid race conditions with multiple sessions" do
-		Verse::Session.mutex.should_not be_locked()
-		Verse::Session.synchronize do
-			Verse::Session.mutex.should be_locked()
-		end
-		Verse::Session.mutex.should_not be_locked()
-	end
-
 	it "doesn't block other threads when calling .update" do
 		updater = Thread.new do
 			Thread.current.abort_on_exception = true
@@ -90,14 +82,14 @@ describe Verse::Session do
 
 	describe "instances" do
 		before( :each ) do
-			@address = "localhost:#@port"
-			@hostid = Verse.create_host_id
-			@session = Verse::Session.new( @address )
+			@session = Verse::Session.new
 		end
 
-		it "calls #on_connect_accept on its SessionObservers when its connection is accepted"
-		it "can connect to a Verse host"
-		it "raises an exception if the address hasn't been set when connecting"
+		it "raises an exception if the address hasn't been set when connecting" do
+			expect {
+				@session.connect
+			}.to raise_exception( Verse::SessionError, /address/i )
+		end
 
 	end
 

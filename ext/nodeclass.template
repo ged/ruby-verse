@@ -46,7 +46,7 @@ VALUE rbverse_cVerse<%= nodetype.capitalize %>Node;
  * Mark the <%= nodetype %> part of a node.
  */
 static void
-rbverse_<%= nodetype %>node_gc_mark( rbverse_NODE *ptr ) {
+rbverse_<%= nodetype %>node_gc_mark( struct rbverse_node *ptr ) {
 	if ( ptr ) {
 		/* TODO: Mark child-specific data */
 	}
@@ -57,7 +57,7 @@ rbverse_<%= nodetype %>node_gc_mark( rbverse_NODE *ptr ) {
  * Free the <%= nodetype %> part of a node.
  */
 static void
-rbverse_<%= nodetype %>node_gc_free( rbverse_NODE *ptr ) {
+rbverse_<%= nodetype %>node_gc_free( struct rbverse_node *ptr ) {
 	if ( ptr ) {
 		/* TODO: Free child-specific data */
 	}
@@ -76,11 +76,12 @@ rbverse_<%= nodetype %>node_gc_free( rbverse_NODE *ptr ) {
  */
 static VALUE
 rbverse_verse_<%= nodetype %>node_initialize( VALUE self ) {
-	rbverse_NODE *ptr;
+	struct rbverse_node *ptr;
 
 	rb_call_super( 0, NULL );
 
 	ptr = rbverse_get_node( self );
+	ptr->type = V_NT_<%= nodetype.upcase %>;
 
 	/* TODO: Initialize <%= nodetype %>-specific instance data. */
 

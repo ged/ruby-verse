@@ -10,7 +10,10 @@ ARCHLIBDIR = LIBDIR + ARCH
 
 NODE_TYPES = %w[audio bitmap curve geometry material object text]
 NODE_TYPE_REGEX = %r{#{EXTDIR}/(#{Regexp.union(NODE_TYPES)})node\.c}
-NODE_TYPE_SOURCES = NODE_TYPES.collect {|nodetype| EXTDIR + "#{nodetype}node.c" }
+NODE_TYPE_SOURCE_PATHS = NODE_TYPES.
+	collect {|nodetype| EXTDIR + "#{nodetype}node.c" }.
+	collect {|path| path.to_s }
+NODE_TYPE_SOURCES = Rake::FileList[ *NODE_TYPE_SOURCE_PATHS ]
 
 NODE_TYPE_TEMPLATE = EXTDIR + 'nodeclass.template'
 
@@ -40,6 +43,7 @@ task :remake_node_classes do
 	Rake::Task[ :node_classes ].invoke
 end
 
+file *NODE_TYPE_SOURCES
 task :node_classes => NODE_TYPE_SOURCES
 task :compile => NODE_TYPE_SOURCES
 

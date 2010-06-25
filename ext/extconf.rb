@@ -4,7 +4,7 @@ require 'mkmf'
 require 'fileutils'
 
 $CFLAGS << ' -Wall'
-$CFLAGS << ' -ggdb' << ' -DDEBUG' if $DEBUG
+$CFLAGS << ' -ggdb' << ' -DDEBUG'
 
 def fail( *messages )
 	$stderr.puts( *messages )

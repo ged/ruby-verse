@@ -50,7 +50,6 @@ VALUE rbverse_mVerseObservable;
 VALUE rbverse_mVerseObserver;
 VALUE rbverse_mVersePingObserver;
 VALUE rbverse_mVerseConnectionObserver;
-VALUE rbverse_mVerseSessionObserver;
 
 VALUE rbverse_eVerseError;
 VALUE rbverse_eVerseConnectError;
@@ -315,7 +314,7 @@ rbverse_cb_connect_i( VALUE observer, VALUE cb_args ) {
 
 
 /*
- * Call the connect handler after aqcuiring the GVL.
+ * Call the connect handler after acquiring the GVL.
  */
 static void *
 rbverse_cb_connect_body( void *ptr ) {
@@ -338,63 +337,65 @@ rbverse_cb_connect_body( void *ptr ) {
  */
 static void
 rbverse_cb_connect( void *unused, const char *name, const char *pass, const char *address,
-                        const uint8 *expected_host_id )
+                    const uint8 *expected_host_id )
 {
 	const char *(args[4]) = { name, pass, address, (const char *)expected_host_id };
-	printf( " Acquiring GVL for 'connect' event.\n" );
+	DEBUGMSG( " Acquiring GVL for 'connect' event.\n" );
 	fflush( stdout );
 	rb_thread_call_with_gvl( rbverse_cb_connect_body, args );
 }
 
 
 /*
- * call-seq:
- *    Verse.add_observer( observer )
- *
- * @see Verse::Observable#add_observer
- *
+ * Iterator for the node-index subscription callback.
  */
 static VALUE
-rbverse_verse_add_observer( VALUE module, VALUE observer ) {
+rbverse_cb_node_index_subscribe_i( VALUE observer, VALUE cb_args ) {
+	if ( !rb_obj_is_kind_of(observer, rbverse_mVerseConnectionObserver) )
+		return Qnil;
 
-	/* Register callbacks when an observer is added; I don't think re-registering
-	   them on observers after the first has any negative consequences...
-	 */
-	verse_callback_set( verse_send_ping, rbverse_cb_ping, NULL );
-	verse_callback_set( verse_send_connect, rbverse_cb_connect, NULL );
-
-	/* TODO: Add callbacks for:
-	 * 	     * verse_node_subscribe/unsubscribe
-	 */
-
-	return rb_call_super( 1, &observer );
+	rbverse_log( "debug", "Node-index subscription callback: notifying observer: %s.",
+	             RSTRING_PTR(rb_inspect( observer )) );
+	return rb_funcall2( observer, rb_intern("on_node_index_subscribe"),
+	                    RARRAY_LEN(cb_args), RARRAY_PTR(cb_args) );
 }
 
 
 /*
- * call-seq:
- *    Verse.remove_observer( observer )
- *
- * @see Verse::Observable#remove_observer
- *
+ * Call the 'node_index_subscribe' handler after acquiring the GVL.
  */
-static VALUE
-rbverse_verse_remove_observer( VALUE module, VALUE observer ) {
-	VALUE rval = Qnil;
+static void *
+rbverse_cb_node_index_subscribe_body( void *ptr ) {
+	const uint32 mask = *((uint32 *)ptr);
+	const VALUE observers = rb_iv_get( rbverse_mVerse, "@observers" );
+	const VALUE cb_args = rb_ary_new();
+	VALUE node_class = Qnil;
+	VNodeType node_type;
 
-	rval = rb_call_super( 1, &observer );
-
-	/* Unregister callbacks if the last observer has been removed */
-	if ( !RARRAY_LEN(rb_iv_get( rbverse_mVerse, "@observers" )) ) {
-		verse_callback_set( verse_send_ping, NULL, NULL );
-		verse_callback_set( verse_send_connect, NULL, NULL );
-
-		/* TODO: Remove callbacks for verse_node_subscribe/unsubscribe */
+	rbverse_log( "debug", "Building the list of subscribed classes from mask: %u.", mask );
+	for ( node_type = V_NT_OBJECT; node_type < V_NT_NUM_TYPES; node_type++ ) {
+		if ( mask & (1 << node_type) ) {
+			node_class = rbverse_node_class_from_node_type( node_type );
+			rbverse_log( "debug", "  adding %s", rb_class2name(node_class) );
+			rb_ary_push( cb_args, node_class );
+		}
 	}
 
-	return rval;
+	rbverse_log( "debug", "Calling node_index_subscribe iterator with %d node classes.",
+	             RARRAY_LEN(cb_args) );
+	rb_block_call( observers, rb_intern("each"), 0, 0, rbverse_cb_node_index_subscribe_i, cb_args );
+
+	return NULL;
 }
 
+
+/*
+ * Callback for the 'node_index_subscribe' command.
+ */
+static void
+rbverse_cb_node_index_subscribe( void *unused, uint32 mask ) {
+	rb_thread_call_with_gvl( rbverse_cb_node_index_subscribe_body, (void *)&mask );
+}
 
 
 /*
@@ -412,10 +413,10 @@ Init_verse_ext( void ) {
 
 	rbverse_mVerseVersioned = rb_define_module_under( rbverse_mVerse, "Versioned" );
 	rbverse_mVerseObserver = rb_define_module_under( rbverse_mVerse, "Observer" );
+	rbverse_mVerseObservable = rb_define_module_under( rbverse_mVerse, "Observable" );
+
 	rbverse_mVersePingObserver = rb_define_module_under( rbverse_mVerse, "PingObserver" );
 	rbverse_mVerseConnectionObserver = rb_define_module_under( rbverse_mVerse, "ConnectionObserver" );
-	rbverse_mVerseSessionObserver = rb_define_module_under( rbverse_mVerse, "SessionObserver" );
-	rbverse_mVerseObservable = rb_define_module_under( rbverse_mVerse, "Observable" );
 
 	rbverse_eVerseError =
 		rb_define_class_under( rbverse_mVerse, "Error", rb_eRuntimeError );
@@ -439,9 +440,6 @@ Init_verse_ext( void ) {
 	rb_define_singleton_method( rbverse_mVerse, "connect_accept", rbverse_verse_connect_accept, 3 );
 	rb_define_singleton_method( rbverse_mVerse, "ping", rbverse_verse_ping, 2 );
 
-	rb_define_singleton_method( rbverse_mVerse, "add_observer", rbverse_verse_add_observer, 1 );
-	rb_define_singleton_method( rbverse_mVerse, "remove_observer", rbverse_verse_remove_observer, 1 );
-
 	/*
 	 * Constants
 	 */
@@ -463,8 +461,12 @@ Init_verse_ext( void ) {
 	/* Init the subordinate classes */
 	rbverse_init_verse_session();
 	rbverse_init_verse_node();
-
 	rbverse_init_verse_mixins();
+
+	/* Set up calbacks */
+	verse_callback_set( verse_send_ping, rbverse_cb_ping, NULL );
+	verse_callback_set( verse_send_connect, rbverse_cb_connect, NULL );
+	verse_callback_set( verse_send_node_index_subscribe, rbverse_cb_node_index_subscribe, NULL );
 
 	rbverse_log( "debug", "Initialized the extension." );
 }

@@ -46,7 +46,7 @@ VALUE rbverse_cVerseBitmapNode;
  * Mark the bitmap part of a node.
  */
 static void
-rbverse_bitmapnode_gc_mark( rbverse_NODE *ptr ) {
+rbverse_bitmapnode_gc_mark( struct rbverse_node *ptr ) {
 	if ( ptr ) {
 		/* TODO: Mark child-specific data */
 	}
@@ -57,7 +57,7 @@ rbverse_bitmapnode_gc_mark( rbverse_NODE *ptr ) {
  * Free the bitmap part of a node.
  */
 static void
-rbverse_bitmapnode_gc_free( rbverse_NODE *ptr ) {
+rbverse_bitmapnode_gc_free( struct rbverse_node *ptr ) {
 	if ( ptr ) {
 		/* TODO: Free child-specific data */
 	}
@@ -76,11 +76,12 @@ rbverse_bitmapnode_gc_free( rbverse_NODE *ptr ) {
  */
 static VALUE
 rbverse_verse_bitmapnode_initialize( VALUE self ) {
-	rbverse_NODE *ptr;
+	struct rbverse_node *ptr;
 
 	rb_call_super( 0, NULL );
 
 	ptr = rbverse_get_node( self );
+	ptr->type = V_NT_BITMAP;
 
 	/* TODO: Initialize bitmap-specific instance data. */
 
