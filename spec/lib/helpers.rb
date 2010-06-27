@@ -80,6 +80,8 @@ module Verse::SpecHelpers
 			Verse.logger = Logger.new( logdevice )
 			# Verse.logger.level = level
 			Verse.logger.formatter = Verse::HtmlLogFormatter.new( Verse.logger )
+		elsif $stderr.tty?
+			Verse.logger.formatter = Verse::ColorLogFormatter.new( Verse.logger )
 		end
 	end
 

@@ -22,7 +22,7 @@
 #endif /* !RUBY_VM */
 
 #ifdef DEBUG
-#	define DEBUGMSG(format, args...) fprintf( stderr, "\033[31m"format"\033[0m", ##args );
+#	define DEBUGMSG(format, args...) fprintf( stderr, "\033[37mDEBUG: "format"\033[0m\n", ##args );
 #else
 #	define DEBUGMSG(format, args...)
 #endif
@@ -111,7 +111,6 @@ extern void ( *node_mark_funcs[] )(struct rbverse_node *);
 extern void ( *node_free_funcs[] )(struct rbverse_node *);
 
 
-
 /* --------------------------------------------------------------
  * Macros
  * -------------------------------------------------------------- */
@@ -129,6 +128,26 @@ extern void ( *node_free_funcs[] )(struct rbverse_node *);
 
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_UPDATE_TIMEOUT 100000
+
+
+/* --------------------------------------------------------------
+ * Inline functions
+ * -------------------------------------------------------------- */
+
+/* 
+ * Check the "alive"-ness of the given +node+, raising an exception if it's either not part
+ * of a session or has been destroyed.
+ */
+static inline void
+rbverse_ensure_node_is_alive( struct rbverse_node *node ) {
+	if ( !node )
+		rb_fatal( "node pointer was NULL!" );
+	if ( !RTEST(node->session) )
+		rb_raise( rbverse_eVerseNodeError, "node is not associated with an active session" );
+	if ( node->destroyed )
+		rb_raise( rbverse_eVerseNodeError, "node is destroyed" );
+}
+
 
 /* --------------------------------------------------------------
  * Declarations

@@ -327,6 +327,7 @@ rbverse_cb_connect_body( void *ptr ) {
 	RARRAY_PTR(cb_args)[2] = rb_str_new2( args[2] );
 	RARRAY_PTR(cb_args)[3] = rbverse_host_id2str( (const uint8 *)args[3] );
 
+	DEBUGMSG( "Calling the cb_connect iterator." );
 	rb_block_call( observers, rb_intern("each"), 0, 0, rbverse_cb_connect_i, cb_args );
 
 	return NULL;
@@ -340,8 +341,7 @@ rbverse_cb_connect( void *unused, const char *name, const char *pass, const char
                     const uint8 *expected_host_id )
 {
 	const char *(args[4]) = { name, pass, address, (const char *)expected_host_id };
-	DEBUGMSG( " Acquiring GVL for 'connect' event.\n" );
-	fflush( stdout );
+	DEBUGMSG( "*** Acquiring GVL for 'connect' event. ***" );
 	rb_thread_call_with_gvl( rbverse_cb_connect_body, args );
 }
 
@@ -436,6 +436,7 @@ Init_verse_ext( void ) {
 	rb_define_singleton_method( rbverse_mVerse, "port=", rbverse_verse_port_eq, 1 );
 	rb_define_alias( rb_singleton_class(rbverse_mVerse), "connect_port=", "port=" );
 	rb_define_singleton_method( rbverse_mVerse, "create_host_id", rbverse_verse_create_host_id, 0 );
+	rb_define_alias( CLASS_OF(rbverse_mVerse), "make_host_id", "create_host_id" );
 	rb_define_singleton_method( rbverse_mVerse, "host_id=", rbverse_verse_host_id_eq, 1 );
 	rb_define_singleton_method( rbverse_mVerse, "connect_accept", rbverse_verse_connect_accept, 3 );
 	rb_define_singleton_method( rbverse_mVerse, "ping", rbverse_verse_ping, 2 );

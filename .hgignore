@@ -6,3 +6,4 @@ hostkey.rsa
 docs/api
 ChangeLog
 \.DS_Store
+^hostid.rsa$

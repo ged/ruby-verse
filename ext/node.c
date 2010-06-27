@@ -78,7 +78,7 @@ rbverse_node_alloc( void ) {
 	ptr->tag_groups = rb_ary_new();
 	ptr->session    = Qnil;
 
-	rbverse_log( "debug", "allocated a rbverse_SESSION <%p>", ptr );
+	DEBUGMSG( "allocated a rbverse_SESSION <%p>", ptr );
 	return ptr;
 }
 
@@ -110,22 +110,22 @@ rbverse_node_gc_mark( struct rbverse_node *ptr ) {
 static void
 rbverse_node_gc_free( struct rbverse_node *ptr ) {
 	if ( ptr ) {
-		DEBUGMSG( "Freeing node 0x%p\n", ptr );
+		DEBUGMSG( "Freeing node 0x%p", ptr );
 
 		if ( ptr->id != ~0 ) {
-			DEBUGMSG( "  removing node ID %d from node map\n", ptr->id );
+			DEBUGMSG( "  removing node ID %d from node map", ptr->id );
 			st_delete_safe( node_map, (st_data_t*)&ptr->id, 0, Qundef );
 			/* TODO: Do I need to do st_cleanup or anything after deletion? */
 		}
 
 		/* Call the node-specific free function if there is one */
 		if ( ptr->type < V_NT_NUM_TYPES ) {
-			DEBUGMSG( "  free function %p for node type %d\n",
+			DEBUGMSG( "  free function %p for node type %d",
 			        node_free_funcs[ptr->type], ptr->type );
 			node_free_funcs[ptr->type]( ptr );
 		}
 
-		DEBUGMSG( "  clearing struct.\n" );
+		DEBUGMSG( "  clearing struct." );
 		ptr->id         = ~0;
 		ptr->type       = V_NT_SYSTEM;
 		ptr->owner      = VN_OWNER_OTHER;
@@ -136,7 +136,7 @@ rbverse_node_gc_free( struct rbverse_node *ptr ) {
 		xfree( ptr );
 		ptr = NULL;
 
-		DEBUGMSG( "  done.\n" );
+		DEBUGMSG( "  done." );
 	}
 }
 
@@ -235,22 +235,6 @@ rbverse_mark_node_destroyed( VALUE nodeobj ) {
 	rbverse_log_with_context( nodeobj, "debug", "Marking node %x destroyed.", node->id );
 	node->destroyed = TRUE;
 }
-
-
-/* 
- * Check the "alive"-ness of the given +node+, raising an exception if it's either not part
- * of a session or has been destroyed.
- */
-static inline void
-rbverse_ensure_node_is_alive( struct rbverse_node *node ) {
-	if ( !node )
-		rb_fatal( "node pointer was NULL!" );
-	if ( !RTEST(node->session) )
-		rb_raise( rbverse_eVerseNodeError, "node is not associated with an active session" );
-	if ( node->destroyed )
-		rb_raise( rbverse_eVerseNodeError, "node is destroyed" );
-}
-
 
 
 

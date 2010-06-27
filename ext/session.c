@@ -76,7 +76,7 @@ rbverse_session_alloc( void ) {
 	ptr->create_callbacks  = Qnil;
 	ptr->destroy_callbacks = Qnil;
 
-	rbverse_log( "debug", "allocated a rbverse_SESSION <%p>", ptr );
+	DEBUGMSG( "allocated a rbverse_SESSION <%p>", ptr );
 	return ptr;
 }
 
@@ -224,6 +224,7 @@ rbverse_verse_session_s_allocate( VALUE klass ) {
 static VALUE
 rbverse_verse_session_s_update_body( void *ptr ) {
 	uint32 *microseconds = (uint32 *)ptr;
+	DEBUGMSG( "  calling verse_callback_update( %d ).", *microseconds );
 	verse_callback_update( *microseconds );
 	return Qtrue;
 }
@@ -282,18 +283,18 @@ rbverse_verse_session_s_update( int argc, VALUE *argv, VALUE module ) {
 		microseconds = DEFAULT_UPDATE_TIMEOUT;
 
 	slice = microseconds / ( session_table->num_entries + 1 );
-	rbverse_log( "debug", "Update timeslice is %d µs", slice );
+	DEBUGMSG( "Update timeslice is %d µs", slice );
 
-	rbverse_log( "debug", "  updating the global session" );
+	DEBUGMSG( "  updating the global session" );
 	verse_session_set( 0 );
 	rb_thread_blocking_region( rbverse_verse_session_s_update_body, (uint32 *)&slice,
 		RUBY_UBF_IO, NULL );
 
 	if ( session_table->num_entries ) {
-		rbverse_log( "debug", "  updating %d client sessions", session_table->num_entries );
+		DEBUGMSG( "  updating %d client sessions", session_table->num_entries );
 		st_foreach( session_table, rbverse_verse_session_s_update_i, (st_data_t)slice );
 	} else {
-		rbverse_log( "debug", "  no client sessions to update" );
+		DEBUGMSG( "  no client sessions to update" );
 	}
 
 	return Qtrue;
@@ -630,6 +631,16 @@ rbverse_verse_session_create_node( int argc, VALUE *argv, VALUE self ) {
 }
 
 
+
+/* Synchronized portion of rbverse_verse_session_destroy_node() */
+static VALUE
+rbverse_verse_session_destroy_node_l( VALUE node ) {
+	VNodeID node_id = (VNodeID)node;
+	verse_send_node_destroy( node_id );
+	return Qtrue;
+}
+
+
 /*
  * call-seq:
  *    session.destroy_node( node ) {|node| ... }
@@ -648,28 +659,26 @@ rbverse_verse_session_create_node( int argc, VALUE *argv, VALUE self ) {
 static VALUE
 rbverse_verse_session_destroy_node( int argc, VALUE *argv, VALUE self ) {
 	struct rbverse_session *session = rbverse_get_session( self );
-	VALUE nodeclass, callback, callback_queue;
+	VALUE nodeobj, callback;
+	struct rbverse_node *node;
 
 	if ( !session->id )
-		rb_raise( rbverse_eVerseSessionError, "can't create a node via an unconnected session" );
-
-	rb_scan_args( argc, argv, "1&", &nodeclass, &callback );
-	callback_queue = rb_hash_aref( session->create_callbacks, nodeclass );
-
-	Check_Type( nodeclass, T_CLASS );
-
-	if ( !RTEST(callback) )
-		callback = rb_block_proc();
-	if ( !RTEST(callback_queue) )
 		rb_raise( rbverse_eVerseSessionError,
-		          "don't know how to create %s objects (no callback queue)", 
-		          rb_class2name(nodeclass) );
+		          "can't destroy a node via an unconnected session" );
 
-	/* Add the callback to the queue. This isn't done inside the lock as
-	 * we don't really care if the nodes are created strictly in the order
-	 * in which they're created. */
-	rb_ary_push( callback_queue, callback );
-	return rbverse_with_session_lock( self, rbverse_verse_session_create_node_l, nodeclass );
+	/* Unwrap the arguments and check the node object for sanity */
+	rb_scan_args( argc, argv, "1&", &nodeobj, &callback );
+	node = rbverse_get_node( nodeobj );
+	rbverse_ensure_node_is_alive( node );
+
+	/* Use a no-op destruction callback if none was specified. */
+	if ( !RTEST(callback) ) callback = rb_block_proc();
+
+	/* Add the destruction callback for the node */
+	rb_hash_aset( session->destroy_callbacks, nodeobj, callback );
+
+	/* Cast: VNodeID -> VALUE */
+	return rbverse_with_session_lock( self, rbverse_verse_session_destroy_node_l, (VALUE)node->id );
 }
 
 

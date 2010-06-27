@@ -53,12 +53,6 @@ describe Verse::Node do
 			}.to raise_exception( Verse::NodeError, /already set/ )
 		end
 
-		it "can be created on the server" do
-			
-		end
-
-		it "can be destroyed"
-
 		it "can have a name"
 
 		it "can be subscribed to"
@@ -66,8 +60,6 @@ describe Verse::Node do
 
 		it "can create tag groups"
 		it "can destroy tag groups"
-		it "can subscribe to a tag group"
-		it "can unsubscribe from a tag group"
 
 	end
 end

@@ -76,7 +76,7 @@ describe Verse do
 		end
 
 		it "are sent to objects which are PingObservers" do
-			pending "splitting the server and ping APIs a bit more" do
+			pending "Figuring out why the hell no commands are being received" do
 				observer_class = Class.new do
 					include Verse::PingObserver
 
@@ -94,8 +94,10 @@ describe Verse do
 
 				Verse.add_observer( observer )
 				Verse.ping( addr, data )
-				Verse::Session.update( 0.1 )
-				Verse::Session.update( 0.1 )
+				10.times do
+					Verse::Session.update( 0.1 )
+					Verse::Session.update( 0.1 )
+				end
 
 				observer.address.should == addr
 				observer.data.should == data

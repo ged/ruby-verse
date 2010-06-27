@@ -12,11 +12,14 @@ BEGIN {
 	$LOAD_PATH.unshift( extdir ) unless $LOAD_PATH.include?( extdir )
 }
 
+require 'ostruct'
+
 require 'spec'
 require 'spec/lib/constants'
 require 'spec/lib/helpers'
 
 require 'verse'
+require 'verse/server'
 
 
 include Verse::TestConstants
@@ -38,7 +41,7 @@ describe Verse::Session do
 	before( :each ) do
 		Verse.remove_observers
 		@port = 45196
-		Verse.port = @port
+		@address = "localhost:#@port"
 	end
 
 
@@ -80,16 +83,80 @@ describe Verse::Session do
 	end
 
 
-	describe "instances" do
+	describe "instances that have not yet connected" do
 		before( :each ) do
 			@session = Verse::Session.new
 		end
 
-		it "raises an exception if the address hasn't been set when connecting" do
+		it "raise an exception if their address hasn't been set when connecting" do
 			expect {
-				@session.connect
+				@session.connect( 'user', 'pass' )
 			}.to raise_exception( Verse::SessionError, /address/i )
 		end
+
+	end
+
+
+	describe "instances that are connected" do
+		before( :all ) do
+			unless @server_pid = Process.fork
+				begin
+					config = OpenStruct.new
+					config.port = 45196
+					Verse::Server.new( config ).run
+				rescue RuntimeError, ScriptError => err
+					$stderr.puts "\e[31;43m %p in the server setup: %s\e[0m" %
+					 	[ err.class, err.message ]
+					err.backtrace.each do |frame|
+						$stderr.puts "   #{frame}"
+					end
+				ensure
+					exit!
+				end
+			end
+		end
+
+		before( :each ) do
+			@session = Verse::Session.new( @address )
+			@session.connect( 'test', 'test' )
+			@update_thread = Thread.new do
+				Thread.current.abort_on_exception = true
+				Thread.current[:running] = true
+				Verse::Session.update until Thread.current[:halt]
+			end
+		end
+
+		after( :each ) do
+			@update_thread[:halt] = true
+			@update_thread.join
+		end
+
+		after( :all ) do
+			Process.kill( :TERM, @server_pid )
+			Process.wait
+		end
+
+		it "raise an exception if asked to destroy a node that doesn't belong to a session" do
+			node = Verse::ObjectNode.new
+			expect {
+				@session.destroy_node( node )
+			}.to raise_exception( Verse::NodeError, /active session/i )
+		end
+
+		it "raise an exception if asked to destroy a node that belongs to another session" # do
+		 # 			other_session = Verse::Session.new( @address )
+		 # 			other_session.connect( 'test2', 'test2' )
+		 # 
+		 # 			finished = false
+		 # 			other_session.create_node( Verse::ObjectNode ) do |node|
+		 # 				expect {
+		 # 					@session.destroy_node( node )
+		 # 				}.to raise_exception( Verse::SessionError, /alive/ )
+		 # 				finished = true
+		 # 			end
+		 # 
+		 # 			sleep 1 until finished
+		 # 		end
 
 	end
 

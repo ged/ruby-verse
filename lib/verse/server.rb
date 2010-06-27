@@ -9,10 +9,10 @@ require 'verse/utils'
 
 # Basic Verse server object class
 class Verse::Server
-	include Singleton,
-	        Verse::Loggable,
+	include Verse::Loggable,
 	        Verse::PingObserver,
-	        Verse::ConnectionObserver
+	        Verse::ConnectionObserver,
+	        Verse::SessionObserver
 
 	# The path to the server's saved hostid
 	HOSTID_FILE = Pathname( 'hostid.rsa' )
@@ -32,6 +32,8 @@ class Verse::Server
 		@host_id      = self.load_host_id
 		@connections = {}
 		@nodes       = {}
+
+		@state       = :stopped
 	end
 
 
@@ -55,6 +57,26 @@ class Verse::Server
 	### Start listening for events.
 	def run
 		self.observe( Verse )
+		self.log.info "Starting run loop"
+
+		@state = :running
+		Verse::Session.update until @state != :running
+	end
+
+
+	### Shut the server down using the specified +reason+.
+	def shutdown( reason="No reason given." )
+		self.reset_signal_handlers
+		self.log.warn "Server shutdown: #{reason}"
+
+		self.stop_observing( Verse )
+		@connections.keys.each do |addr|
+			conn = @connections.delete( addr )
+			self.stop_observing( conn.session )
+			Verse.terminate_connection( addr, reason )
+		end
+
+		@state = :shutdown
 	end
 
 
@@ -72,9 +94,9 @@ class Verse::Server
 
 	### Set up signal handlers to restart/shutdown the server.
 	def reset_signal_handlers
-		Signal.trap( :INT, 'IGN' )
-		Signal.trap( :TERM, 'IGN' )
-		Signal.trap( :HUP, 'IGN' )
+		Signal.trap( :INT, 'DEFAULT' )
+		Signal.trap( :TERM, 'DEFAULT' )
+		Signal.trap( :HUP, 'DEFAULT' )
 	end
 
 
@@ -84,7 +106,7 @@ class Verse::Server
 		if HOSTID_FILE.exist?
 			return HOSTID_FILE.read
 		else
-			hostid = Verse.make_host_id
+			hostid = Verse.create_host_id
 			HOSTID_FILE.open( File::WRONLY|File::CREAT|File::EXCL, 0600 ) do |ofh|
 				ofh.write( hostid )
 			end
@@ -99,21 +121,36 @@ class Verse::Server
 	end
 
 
+	### Remove a node from the server.
+	def remove_node( node )
+		
+	end
+
+
 	#
 	# ConnectionObserver API
 	#
 
 	### Receive a connect event from a client. 
-	def on_connect( user, pass, address, expected_host_id )
-		return unless expected_host_id.nil? || expected_host_id == self.host_id
+	def on_connect( user, pass, address, expected_host_id=nil )
+		self.log.info "Connect: %s@%s" % [ user, address ]
+		unless expected_host_id.nil? || expected_host_id == self.host_id
+			self.log.warn "  connection expected a different hostid. Ignoring connection."
+			return
+		end
 
 		# Create the session's avatar
+		self.log.debug "  creating %s's avatar" % [ user ]
 		avatar = Verse::ObjectNode.new
+		self.log.debug "  adding avatar: %p" % [ avatar ]
 		self.add_node( avatar )
 
+		self.log.debug "  sending connect_accept back to %p" % [ address ]
 		session = Verse.connect_accept( avatar, address, self.host_id )
+		self.observe( session )
 		connection = Verse::Server::Connection.new( address, user, session, avatar )
 
+		self.log.debug "  adding the connection (total: %d)" % [ self.connections.length + 1 ]
 		self.connections[ address ] = connection
 	end
 
