@@ -7,6 +7,14 @@ You can check out the current development source with Mercurial like so:
 
     hg clone http://bitbucket.org/ged/ruby-verse
 
+or if you prefer Git:
+
+    git clone git://github.com/ged/ruby-verse.git
+
+You'll probably also need the rake tasks in a directory called 'rake' in the working directory. If you're using Mercurial, it should pull them down for you as a subrepo, but if you unpack the source or check it out using Git, you may need to do:
+
+    git clone git://github.com/ged/geds-rake-tasklibs.git rake
+
 You can submit bug reports, suggestions, and read more about future plans at the
 [project page](http://bitbucket.org/ged/ruby-verse).
 
