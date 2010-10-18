@@ -100,7 +100,7 @@ rbverse_init_verse_<%= nodetype %>node( void ) {
 	rbverse_cVerse<%= nodetype.capitalize %>Node = rb_define_class_under( rbverse_mVerse, "<%= nodetype.capitalize %>Node", rbverse_cVerseNode );
 
     /* Constants */
-	rb_define_const( rbverse_cVerse<%= nodetype.capitalize %>Node, "TYPE_NUMBER", INT2FIX(V_NT_<%= nodetype.upcase %>) );
+	rb_define_const( rbverse_cVerse<%= nodetype.capitalize %>Node, "TYPE_NUMBER", rb_uint2inum(V_NT_<%= nodetype.upcase %>) );
 
 	/* Initializer */
 	rb_define_method( rbverse_cVerse<%= nodetype.capitalize %>Node, "initialize", rbverse_verse_<%= nodetype %>node_initialize, 0 );

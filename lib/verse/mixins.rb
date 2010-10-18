@@ -12,7 +12,8 @@ require 'verse'
 # code were stolen from ThingFish under the BSD license.
 module Verse
 
-	### Add logging to a Verse class. Including classes get #log and #log_debug methods.
+	### Add logging to a Verse class. Including classes get #log and #log_debug 
+	### instance methods.
 	module Loggable
 
 		LEVEL = {
@@ -227,39 +228,6 @@ module Verse
 	end # PingObserver
 
 
-	### A mixin for objects which wish to observe Verse connection events.
-	module ConnectionObserver
-		include Verse::Loggable,
-		        Verse::Observer
-
-		### Called when a Verse client connects.
-		### 
-		### @param [String]  user     the username provided by the connecting client
-		### @param [String]  pass     the password provided by the connecting client
-		### @param [String]  address  the address of the connecting client
-		### @param [String]  hostid   the expected hostid provided by the connecting client
-		def on_connect( user, pass, address, hostid )
-			self.log.debug "unhandled on_connect: '%s' connected from '%s'" % [ user, address ]
-		end
-
-
-		### Called when a Verse client requests subscriptions to create/destroy events
-		### for the specified node +classes+.
-		### 
-		### @param [Array<Class>] classes  the Verse::Node classes to subscribe to.
-		def on_node_index_subscribe( *classes )
-			classes.flatten!
-			if classes.empty?
-				self.log.debug "unhandled node_index_subscribe: clear subscriptions"
-			else
-				self.log.debug "unhandled node_index_subscribe: classes: %s" %
-					[ classes.collect {|kl| kl.name }.join(', ') ]
-			end
-		end
-
-	end # module ConnectionObserver
-
-
 	### A mixin for objects which wish to observe events on a Verse::Session.
 	module SessionObserver
 		include Verse::Loggable,
@@ -290,8 +258,8 @@ module Verse
 
 
 		### Called when a new node is created (or indexed) on the server.
-		def on_node_create( node )
-			self.log.debug "unhandled on_node_create for %p" % [ node ]
+		def on_node_created( node )
+			self.log.debug "unhandled on_node_created for %p" % [ node ]
 		end
 
 

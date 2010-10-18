@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
 
+require 'pathname'
+require 'rbconfig'
 
 # A Ruby binding for the Verse network protocol library.
 module Verse
@@ -15,11 +17,12 @@ module Verse
 	require 'verse/mixins'
 	require 'verse/constants'
 
+	include Verse::Constants
 	extend Verse::VersionUtilities,
 	       Verse::Observable
 
- 	if vvec( RUBY_VERSION ) < vvec( '1.9.1' )
-		warn ">>> This library was written for Ruby 1.9.1. It may or may not work " +
+ 	if vvec( RUBY_VERSION ) < vvec( '1.9.2' )
+		warn ">>> This library was written for Ruby 1.9.2. It may or may not work " +
 		     "with earlier versions. <<<"
 	end
 
@@ -89,7 +92,9 @@ module Verse
 			raise "Oops, can't extract the major/minor version from #{RUBY_VERSION.dump}"
 		require "#{major_minor}/verse_ext"
 	else
-		require 'verse_ext'
+		archlib = Pathname( __FILE__ ).dirname + Config::CONFIG['arch']
+		requirepath = archlib + 'verse_ext'
+		require( requirepath.to_s )
 	end
 
 end # module Verse

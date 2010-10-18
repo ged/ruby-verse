@@ -100,7 +100,7 @@ rbverse_init_verse_materialnode( void ) {
 	rbverse_cVerseMaterialNode = rb_define_class_under( rbverse_mVerse, "MaterialNode", rbverse_cVerseNode );
 
     /* Constants */
-	rb_define_const( rbverse_cVerseMaterialNode, "TYPE_NUMBER", INT2FIX(V_NT_MATERIAL) );
+	rb_define_const( rbverse_cVerseMaterialNode, "TYPE_NUMBER", rb_uint2inum(V_NT_MATERIAL) );
 
 	/* Initializer */
 	rb_define_method( rbverse_cVerseMaterialNode, "initialize", rbverse_verse_materialnode_initialize, 0 );

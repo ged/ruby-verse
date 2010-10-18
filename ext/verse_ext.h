@@ -45,7 +45,6 @@ extern VALUE rbverse_mVerseVersioned;
 extern VALUE rbverse_mVerseObserver;
 extern VALUE rbverse_mVerseObservable;
 extern VALUE rbverse_mVersePingObserver;
-extern VALUE rbverse_mVerseConnectionObserver;
 extern VALUE rbverse_mVerseSessionObserver;
 extern VALUE rbverse_mVerseNodeObserver;
 
@@ -62,9 +61,12 @@ extern VALUE rbverse_cVerseCurveNode;
 extern VALUE rbverse_cVerseAudioNode;
 
 extern VALUE rbverse_eVerseError;
+extern VALUE rbverse_eVerseServerError;
 extern VALUE rbverse_eVerseConnectError;
 extern VALUE rbverse_eVerseSessionError;
 extern VALUE rbverse_eVerseNodeError;
+
+extern st_table *session_table;
 
 
 /* --------------------------------------------------------------
@@ -114,18 +116,6 @@ extern void ( *node_free_funcs[] )(struct rbverse_node *);
 /* --------------------------------------------------------------
  * Macros
  * -------------------------------------------------------------- */
-#define IsSession( obj ) rb_obj_is_kind_of( (obj), rbverse_cVerseSession )
-#define IsServer( obj ) rb_obj_is_kind_of( (obj), rbverse_cVerseServer )
-
-#define IsNode( obj ) rb_obj_is_kind_of( (obj), rbverse_cVerseNode )
-#define IsAudioNode( obj ) rb_obj_is_kind_of( (obj), rbverse_cVerseAudioNode )
-#define IsBitmapNode( obj ) rb_obj_is_kind_of( (obj), rbverse_cVerseBitmapNode )
-#define IsCurveNode( obj ) rb_obj_is_kind_of( (obj), rbverse_cVerseCurveNode )
-#define IsGeometryNode( obj ) rb_obj_is_kind_of( (obj), rbverse_cVerseGeometryNode )
-#define IsMaterialNode( obj ) rb_obj_is_kind_of( (obj), rbverse_cVerseMaterialNode )
-#define IsObjectNode( obj ) rb_obj_is_kind_of( (obj), rbverse_cVerseObjectNode )
-#define IsTextNode( obj ) rb_obj_is_kind_of( (obj), rbverse_cVerseTextNode )
-
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_UPDATE_TIMEOUT 100000
 
@@ -146,6 +136,38 @@ rbverse_ensure_node_is_alive( struct rbverse_node *node ) {
 		rb_raise( rbverse_eVerseNodeError, "node is not associated with an active session" );
 	if ( node->destroyed )
 		rb_raise( rbverse_eVerseNodeError, "node is destroyed" );
+}
+
+/* Type-check functions */
+static inline boolean IsSession( VALUE obj ) {
+	return rb_obj_is_kind_of( obj, rbverse_cVerseSession ) ? TRUE : FALSE;
+}
+static inline boolean IsServer( VALUE obj ) {
+	return rb_obj_is_kind_of( obj, rbverse_cVerseServer ) ? TRUE : FALSE;
+}
+static inline boolean IsNode( VALUE obj ) {
+	return rb_obj_is_kind_of( obj, rbverse_cVerseNode ) ? TRUE : FALSE;
+}
+static inline boolean IsAudioNode( VALUE obj ) {
+	return rb_obj_is_kind_of( obj, rbverse_cVerseAudioNode ) ? TRUE : FALSE;
+}
+static inline boolean IsBitmapNode( VALUE obj ) {
+	return rb_obj_is_kind_of( obj, rbverse_cVerseBitmapNode ) ? TRUE : FALSE;
+}
+static inline boolean IsCurveNode( VALUE obj ) {
+	return rb_obj_is_kind_of( obj, rbverse_cVerseCurveNode ) ? TRUE : FALSE;
+}
+static inline boolean IsGeometryNode( VALUE obj ) {
+	return rb_obj_is_kind_of( obj, rbverse_cVerseGeometryNode ) ? TRUE : FALSE;
+}
+static inline boolean IsMaterialNode( VALUE obj ) {
+	return rb_obj_is_kind_of( obj, rbverse_cVerseMaterialNode ) ? TRUE : FALSE;
+}
+static inline boolean IsObjectNode( VALUE obj ) {
+	return rb_obj_is_kind_of( obj, rbverse_cVerseObjectNode ) ? TRUE : FALSE;
+}
+static inline boolean IsTextNode( VALUE obj ) {
+	return rb_obj_is_kind_of( obj, rbverse_cVerseTextNode ) ? TRUE : FALSE;
 }
 
 
@@ -173,6 +195,7 @@ extern inline VALUE rbverse_host_id2str				_(( const uint8 * ));
 extern VALUE rbverse_get_current_session			_(( void ));
 extern VALUE rbverse_with_session_lock				_(( VALUE, VALUE (*)(ANYARGS), VALUE ));
 extern VALUE rbverse_verse_session_from_vsession	_(( VSession, VALUE ));
+extern VALUE rbverse_verse_session_s_all_connected  _(( VALUE ));
 
 /* node.c */
 extern VALUE rbverse_node_class_from_node_type		_(( VNodeType  ));

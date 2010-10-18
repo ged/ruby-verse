@@ -20,8 +20,6 @@ require 'pathname'
 class MyServer < Verse::Server
 	require 'digest/sha1'
 
-	include Verse::ConnectionObserver
-
 	USERS = {
 		'bargle' => 'a76282512cb523ec1f82c79b4f51e34cdd5f11ea'
 	}

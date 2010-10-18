@@ -7,3 +7,4 @@ docs/api
 ChangeLog
 \.DS_Store
 ^hostid.rsa$
+mkmf\.log

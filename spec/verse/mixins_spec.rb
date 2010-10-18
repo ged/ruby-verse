@@ -8,11 +8,13 @@ BEGIN {
 	libdir = basedir + "lib"
 	extdir = libdir + Config::CONFIG['sitearch']
 
+	$LOAD_PATH.unshift( basedir ) unless $LOAD_PATH.include?( basedir )
 	$LOAD_PATH.unshift( libdir ) unless $LOAD_PATH.include?( libdir )
 	$LOAD_PATH.unshift( extdir ) unless $LOAD_PATH.include?( extdir )
 }
 
-require 'spec'
+require 'rspec'
+
 require 'spec/lib/constants'
 require 'spec/lib/helpers'
 
@@ -216,21 +218,6 @@ describe Verse, "mixins: " do
 		it "can receive ping events" do
 			@observer.should respond_to( :on_ping )
 		end
-	end
-
-
-	describe Verse::ConnectionObserver, "objects" do
-		before( :each ) do
-			@observer_class = Class.new do
-				include Verse::ConnectionObserver
-			end
-			@observer = @observer_class.new
-		end
-
-		it "can receive connect events" do
-			@observer.should respond_to( :on_connect )
-		end
-
 	end
 
 

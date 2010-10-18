@@ -9,46 +9,28 @@ require 'verse/constants'
 module Verse::TestConstants
 	include Verse::Constants
 
-	class SimpleConnectionObserver
-		include Verse::ConnectionObserver
+	class SimpleTestServer < Verse::Server
+		include Verse::SessionObserver
 
-		### Create a new SimpleConnectionObserver.
+		### Create a new SimpleServer.
 		def initialize
-			@clients = {}
+			@connections   = []
+			@subscriptions = []
 		end
+
+		attr_reader :connections, :subscriptions
 
 		### Accept any connection.
 		def on_connect( user, pass, addr, hostid )
-			self.log.debug "on_connect: %s from %s, looking for host %p" % [ user, addr, hostid ]
-			avatar = self.make_avatar( user, pass, addr )
-			session = Verse.connect_accept( avatar, addr, hostid )
-
-			@clients[ addr ] = { :session => session, :avatar => avatar }
-
-			return session
+			self.connections << [ user, pass, addr, hostid ]
 		end
 
 		### Handle a client telling the server it's disconnecting
-		def on_connect_terminate( addr, message )
-			self.log.debug "on_connect_terminate: from %s: %s" % [ addr, message ]
-			client = @clients.delete( addr )
-			client[:avatar].destroy if client[:avatar].respond_to?( :destroy )
+		def on_node_index_subscribe( addr, message )
+			self.subscriptions << [ addr, message ]
 		end
 
-		### Terminate the session from the specified +addr+.
-		def terminate( addr, message )
-			self.log.debug "Terminating connection from %s: %s" % [ addr, message ]
-			Verse.connect_terminate( addr, message )
-			self.on_connect_terminate( addr, message )
-		end
-
-		### Create an avatar node for the given +user+ and return it.
-		def make_avatar( user, addr )
-			self.log.debug "emulating an avatar node"
-			return 1
-		end
-
-	end # class SimpleConnectionObserver
+	end # class SimpleTestServer
 
 end
 

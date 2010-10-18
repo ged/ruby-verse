@@ -16,12 +16,26 @@ class NodeLister
 	include Verse::SessionObserver,
 	        Verse::NodeObserver
 
-	def on_create_node( session, node )
-		node.add_observer( self )
+	def initialize( session )
+		self.observe( session )
+		@session = session
 	end
 
-	def on_set_name( node, name )
-		$stdout.puts "Node created: %p (%s)" % [ node, name ]
+	def on_connect_accept( avatar, addr, hostid )
+		$stderr.puts "Connection accepted; my avatar is: %p" % [ avatar ]
+		@session.subscribe_to_node_index( Verse::ObjectNode )
+	end
+
+	def on_node_created( node )
+		self.observe( node )
+	end
+
+	def on_node_destroy( node )
+		self.stop_observing( node )
+	end
+
+	def on_node_name_set( node, name )
+		$stdout.puts "Node %p is now named %p" % [ node, name ]
 	end
 
 end
@@ -34,11 +48,15 @@ if $0 == __FILE__
 		ARGV.shift
 	end
 
-	session = Verse::Session.new( host, "spoo", "fleem" )
+	Verse.logger.level = Logger::DEBUG
+	Verse.logger.formatter = Verse::ColorLogFormatter.new( Verse.logger )
 
-	lister = NodeLister.new
-	session.add_observer( lister )
+	session = Verse::Session.new( host )
+	lister = NodeLister.new( session )
+	$stderr.puts "Connecting to %p" % [ host ]
 
-	Verse::Session.update until session.terminated?
+	session.connect( "spoo", "fleem" )
+
+	Verse.update( 2 ) while session.connected?
 end
 

@@ -100,7 +100,7 @@ rbverse_init_verse_bitmapnode( void ) {
 	rbverse_cVerseBitmapNode = rb_define_class_under( rbverse_mVerse, "BitmapNode", rbverse_cVerseNode );
 
     /* Constants */
-	rb_define_const( rbverse_cVerseBitmapNode, "TYPE_NUMBER", INT2FIX(V_NT_BITMAP) );
+	rb_define_const( rbverse_cVerseBitmapNode, "TYPE_NUMBER", rb_uint2inum(V_NT_BITMAP) );
 
 	/* Initializer */
 	rb_define_method( rbverse_cVerseBitmapNode, "initialize", rbverse_verse_bitmapnode_initialize, 0 );

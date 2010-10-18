@@ -104,7 +104,7 @@ rbverse_init_verse_audionode( void ) {
 	rbverse_cVerseAudioNode = rb_define_class_under( rbverse_mVerse, "AudioNode", rbverse_cVerseNode );
 
     /* Constants */
-	rb_define_const( rbverse_cVerseAudioNode, "TYPE_NUMBER", INT2FIX(V_NT_AUDIO) );
+	rb_define_const( rbverse_cVerseAudioNode, "TYPE_NUMBER", rb_uint2inum(V_NT_AUDIO) );
 
 	/* Initializer */
 	rb_define_method( rbverse_cVerseAudioNode, "initialize", rbverse_verse_audionode_initialize, 0 );

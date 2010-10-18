@@ -9,13 +9,14 @@ BEGIN {
 	libdir = basedir + "lib"
 	extdir = libdir + Config::CONFIG['sitearch']
 
+	$LOAD_PATH.unshift( basedir ) unless $LOAD_PATH.include?( basedir )
 	$LOAD_PATH.unshift( libdir ) unless $LOAD_PATH.include?( libdir )
 	$LOAD_PATH.unshift( extdir ) unless $LOAD_PATH.include?( extdir )
 }
 
-require 'socket'
+require 'rspec'
 
-require 'spec'
+require 'socket'
 require 'spec/lib/constants'
 require 'spec/lib/helpers'
 
@@ -75,49 +76,41 @@ describe Verse do
 			Verse.remove_observers
 		end
 
-		it "are sent to objects which are PingObservers" do
-			pending "Figuring out why the hell no commands are being received" do
-				observer_class = Class.new do
-					include Verse::PingObserver
-
-					def on_ping( address, data )
-						@address = address
-						@data    = data
-					end
-
-					attr_reader :address, :data
-				end
-
-				observer = observer_class.new
-				addr     = "127.0.0.1:#@port"
-				data     = 'expected message'
-
-				Verse.add_observer( observer )
-				Verse.ping( addr, data )
-				10.times do
-					Verse::Session.update( 0.1 )
-					Verse::Session.update( 0.1 )
-				end
-
-				observer.address.should == addr
-				observer.data.should == data
-			end
-		end
-
-		it "aren't sent to observers which aren't PingObservers" do
+		it "receives pings" do
 			observer_class = Class.new do
-				include Verse::ConnectionObserver
+				include Verse::PingObserver
+
+				def initialize
+					@ping_received = false
+					@address       = address
+					@data          = data
+				end
+
+				def on_ping( address, data )
+					@ping_received = true
+					@address       = address
+					@data          = data
+				end
+
+				attr_reader :address, :data
+
+				def received_ping?; @ping_received ? true : false ; end
 			end
 
 			observer = observer_class.new
 			addr     = "127.0.0.1:#@port"
 			data     = 'expected message'
 
-			observer.observe( Verse )
-			observer.should_not_receive( :on_ping )
+			Verse.add_observer( observer )
 			Verse.ping( addr, data )
-			Verse::Session.update( 0.1 )
-			Verse::Session.update( 0.1 )
+
+			10.times do
+				Verse.update( 0.1 )
+				break if observer.received_ping?
+			end
+
+			observer.address.should == addr
+			observer.data.should == data
 		end
 
 	end
@@ -194,8 +187,8 @@ describe Verse do
 
 
 			it "uses the new defaults when the logging subsystem is reset" do
-				logger = mock( "dummy logger", :null_object => true )
-				formatter = mock( "dummy logger" )
+				logger = mock( "dummy logger" ).as_null_object
+				formatter = mock( "dummy log formatter" )
 
 				Verse.default_logger = logger
 				Verse.default_log_formatter = formatter

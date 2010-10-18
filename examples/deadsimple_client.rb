@@ -30,7 +30,7 @@ class Client
 		puts "Connecting..."
 		@session.connect( 'user', 'pass' )
 		@running = true
-		Verse::Session.update while @running
+		Verse.update while @running
 		puts "Disconnected."
 	end
 

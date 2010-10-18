@@ -24,6 +24,7 @@ All classes and modules in Ruby-Verse are declared inside the _Verse_ module.
 
 ### Classes
 
+* Server
 * Session (Observable)
 * Node (Observable)
 	- ObjectNode
@@ -52,7 +53,6 @@ All classes and modules in Ruby-Verse are declared inside the _Verse_ module.
 ### Observer Mixins
 
 * PingObserver
-* ConnectionObserver
 * SessionObserver
 
 * NodeObserver

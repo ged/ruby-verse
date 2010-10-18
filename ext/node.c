@@ -250,8 +250,6 @@ rbverse_mark_node_destroyed( VALUE nodeobj ) {
  */
 static VALUE
 rbverse_verse_node_s_allocate( VALUE klass ) {
-	if ( klass == rbverse_cVerseNode )
-		rb_raise( rb_eTypeError, "can't instantiate %s directly", rb_class2name(klass) );
 	return Data_Wrap_Struct( klass, rbverse_node_gc_mark, rbverse_node_gc_free, 0 );
 }
 
@@ -270,11 +268,12 @@ rbverse_verse_node_s_allocate( VALUE klass ) {
  */
 static VALUE
 rbverse_verse_node_initialize( VALUE self ) {
+	if ( rbverse_cVerseNode == CLASS_OF(self) )
+		rb_raise( rb_eTypeError, "can't instantiate %s directly", rb_obj_classname(self) );
+
 	if ( !rbverse_check_node(self) ) {
 		struct rbverse_node *node;
-
 		DATA_PTR( self ) = node = rbverse_node_alloc();
-
 		rb_call_super( 0, NULL );
 	} else {
 		rb_raise( rb_eRuntimeError,
@@ -396,7 +395,7 @@ static VALUE
 rbverse_verse_node_id_eq( VALUE self, VALUE newid ) {
 	struct rbverse_node *node = rbverse_get_node( self );
 
-	if ( node->id != ~0 )
+	if ( (signed int)node->id != ~0 )
 		rb_raise( rbverse_eVerseNodeError, "node's ID is already set" );
 
 	node->id = NUM2UINT( newid );
@@ -440,15 +439,9 @@ rbverse_verse_node_session_eq( VALUE self, VALUE session ) {
  * Iterator body for node_name_set observers.
  */
 static VALUE
-rbverse_cb_node_name_set_i( VALUE observer, VALUE node, int argc, VALUE *argv ) {
-	const VALUE name = argv[0];
-	VALUE cb_args = rb_ary_new2( 2 );
-
+rbverse_node_cb_name_set_i( VALUE observer, VALUE cb_args, int argc, VALUE *argv ) {
 	if ( !rb_obj_is_kind_of(observer, rbverse_mVerseNodeObserver) )
 		return Qnil;
-
-	RARRAY_PTR( cb_args )[0] = node;
-	RARRAY_PTR( cb_args )[1] = name;
 
 	rbverse_log( "debug", "Node_name_set callback: notifying observer: %s.",
 	             RSTRING_PTR(rb_inspect( observer )) );
@@ -461,18 +454,18 @@ rbverse_cb_node_name_set_i( VALUE observer, VALUE node, int argc, VALUE *argv ) 
  * Call the node_name_set handler after aqcuiring the GVL.
  */
 static void *
-rbverse_cb_node_name_set_body( void *ptr ) {
+rbverse_node_cb_name_set_body( void *ptr ) {
 	struct rbverse_node_name_set_event *event = (struct rbverse_node_name_set_event *)ptr;
 	const VALUE node = rbverse_lookup_verse_node( event->node_id );
 	VALUE name = rb_str_new2( event->name );
-	VALUE observers;
+	VALUE observers, cb_args;
 
 	if ( RTEST(node) ) {
-		rbverse_log( "info", "Got node name '%s' for %p.", event->name,
-		             RSTRING_PTR(rb_inspect(node)) );
+		cb_args = rb_ary_new3( 2, node, name );
+		rbverse_log_with_context( node, "info", "Got node name '%s'.", event->name );
 
 		observers = rb_funcall( node, rb_intern("observers"), 0 );
-		rb_block_call( observers, rb_intern("each"), 1, &name, rbverse_cb_node_name_set_i, node );
+		rb_block_call( observers, rb_intern("each"), 0, 0, rbverse_node_cb_name_set_i, cb_args );
 
 	} else {
 		rbverse_log( "info", "Got node name for a node we haven't loaded (%d)", event->node_id );
@@ -486,7 +479,7 @@ rbverse_cb_node_name_set_body( void *ptr ) {
  * Callback for the 'node_name_set' command
  */
 static void
-rbverse_cb_node_name_set( void *unused, VNodeID node_id, const char *name ) {
+rbverse_node_cb_name_set( void *unused, VNodeID node_id, const char *name ) {
 	struct rbverse_node_name_set_event event;
 
 	event.node_id = node_id;
@@ -495,27 +488,27 @@ rbverse_cb_node_name_set( void *unused, VNodeID node_id, const char *name ) {
 	DEBUGMSG( " Acquiring GVL for 'node_name_set' event.\n" );
 	fflush( stdout );
 
-	rb_thread_call_with_gvl( rbverse_cb_node_name_set_body, (void *)&event );
+	rb_thread_call_with_gvl( rbverse_node_cb_name_set_body, (void *)&event );
 }
 
 
 // static void
-// rbverse_cb_node_tag_group_create( void *unused ) {}
+// rbverse_node_cb_tag_group_create( void *unused ) {}
 // 
 // static void
-// rbverse_cb_node_tag_group_destroy( void *unused ) {}
+// rbverse_node_cb_tag_group_destroy( void *unused ) {}
 // 
 // static void
-// rbverse_cb_node_tag_group_subscribe( void *unused ) {}
+// rbverse_node_cb_tag_group_subscribe( void *unused ) {}
 // 
 // static void
-// rbverse_cb_node_tag_group_unsubscribe( void *unused ) {}
+// rbverse_node_cb_tag_group_unsubscribe( void *unused ) {}
 // 
 // static void
-// rbverse_cb_node_tag_create( void *unused ) {}
+// rbverse_node_cb_tag_create( void *unused ) {}
 // 
 // static void
-// rbverse_cb_node_tag_destroy( void *unused ) {}
+// rbverse_node_cb_tag_destroy( void *unused ) {}
 
 
 
@@ -540,7 +533,7 @@ rbverse_init_verse_node( void ) {
 	rb_include_module( rbverse_cVerseNode, rbverse_mVerseLoggable );
 	rb_include_module( rbverse_cVerseNode, rbverse_mVerseObservable );
 
-	rb_define_const( rbverse_cVerseNode, "TYPE_NUMBER", INT2FIX(V_NT_SYSTEM) );
+	rb_define_const( rbverse_cVerseNode, "TYPE_NUMBER", rb_uint2inum(V_NT_SYSTEM) );
 
 	/* Class methods */
 	rb_define_alloc_func( rbverse_cVerseNode, rbverse_verse_node_s_allocate );
@@ -555,12 +548,10 @@ rbverse_init_verse_node( void ) {
 	rb_define_method( rbverse_cVerseNode, "destroyed?", rbverse_verse_node_destroyed_p, 0 );
 
 	rb_define_method( rbverse_cVerseNode, "session", rbverse_verse_node_session, 0 );
+	rb_define_method( rbverse_cVerseNode, "session=", rbverse_verse_node_session_eq, 1 );
 
 	rb_define_method( rbverse_cVerseNode, "id", rbverse_verse_node_id, 0 );
 	rb_define_method( rbverse_cVerseNode, "id=", rbverse_verse_node_id_eq, 1 );
-
-	/* Protected instance methods */
-	rb_define_protected_method( rbverse_cVerseNode, "session=", rbverse_verse_node_session_eq, 1 );
 
 
 	/* Init child classes */
@@ -580,12 +571,12 @@ rbverse_init_verse_node( void ) {
 	// DEBUGMSG( "Free function for CurveNode (%d) is: %p\n", V_NT_CURVE, node_free_funcs[V_NT_CURVE] );
 	// DEBUGMSG( "Free function for AudioNode (%d) is: %p\n", V_NT_AUDIO, node_free_funcs[V_NT_AUDIO] );
 
-	verse_callback_set( verse_send_node_name_set, rbverse_cb_node_name_set, NULL );
-	// verse_callback_set( verse_send_tag_group_create, rbverse_cb_node_tag_group_create, NULL );
-	// verse_callback_set( verse_send_tag_group_destroy, rbverse_cb_node_tag_group_destroy, NULL );
-	// verse_callback_set( verse_send_tag_group_subscribe, rbverse_cb_node_tag_group_subscribe, NULL );
-	// verse_callback_set( verse_send_tag_group_unsubscribe, rbverse_cb_node_tag_group_unsubscribe, NULL );
-	// verse_callback_set( verse_send_tag_create, rbverse_cb_node_tag_create, NULL );
-	// verse_callback_set( verse_send_tag_destroy, rbverse_cb_node_tag_destroy, NULL );
+	verse_callback_set( verse_send_node_name_set, rbverse_node_cb_name_set, NULL );
+	// verse_callback_set( verse_send_tag_group_create, rbverse_node_cb_tag_group_create, NULL );
+	// verse_callback_set( verse_send_tag_group_destroy, rbverse_node_cb_tag_group_destroy, NULL );
+	// verse_callback_set( verse_send_tag_group_subscribe, rbverse_node_cb_tag_group_subscribe, NULL );
+	// verse_callback_set( verse_send_tag_group_unsubscribe, rbverse_node_cb_tag_group_unsubscribe, NULL );
+	// verse_callback_set( verse_send_tag_create, rbverse_node_cb_tag_create, NULL );
+	// verse_callback_set( verse_send_tag_destroy, rbverse_node_cb_tag_destroy, NULL );
 }
 

@@ -8,13 +8,14 @@ BEGIN {
 	libdir = basedir + "lib"
 	extdir = libdir + Config::CONFIG['sitearch']
 
+	$LOAD_PATH.unshift( basedir ) unless $LOAD_PATH.include?( basedir )
 	$LOAD_PATH.unshift( libdir ) unless $LOAD_PATH.include?( libdir )
 	$LOAD_PATH.unshift( extdir ) unless $LOAD_PATH.include?( extdir )
 }
 
 require 'ostruct'
+require 'rspec'
 
-require 'spec'
 require 'spec/lib/constants'
 require 'spec/lib/helpers'
 
@@ -62,7 +63,7 @@ describe Verse::Session do
 
 		2.times {
 			Verse::Session.all_connected
-			Verse::Session.update
+			Verse.update
 		}
 
 		Verse::Session.all_connected.should include( session1 )
@@ -72,7 +73,7 @@ describe Verse::Session do
 	it "doesn't block other threads when calling .update" do
 		updater = Thread.new do
 			Thread.current.abort_on_exception = true
-			Verse::Session.update( 0.5 )
+			Verse.update( 0.5 )
 		end
 
 		count = 0
@@ -122,7 +123,7 @@ describe Verse::Session do
 			@update_thread = Thread.new do
 				Thread.current.abort_on_exception = true
 				Thread.current[:running] = true
-				Verse::Session.update until Thread.current[:halt]
+				Verse.update until Thread.current[:halt]
 			end
 		end
 
@@ -143,20 +144,20 @@ describe Verse::Session do
 			}.to raise_exception( Verse::NodeError, /active session/i )
 		end
 
-		it "raise an exception if asked to destroy a node that belongs to another session" # do
-		 # 			other_session = Verse::Session.new( @address )
-		 # 			other_session.connect( 'test2', 'test2' )
-		 # 
-		 # 			finished = false
-		 # 			other_session.create_node( Verse::ObjectNode ) do |node|
-		 # 				expect {
-		 # 					@session.destroy_node( node )
-		 # 				}.to raise_exception( Verse::SessionError, /alive/ )
-		 # 				finished = true
-		 # 			end
-		 # 
-		 # 			sleep 1 until finished
-		 # 		end
+		it "raise an exception if asked to destroy a node that belongs to another session"
+		# 	other_session = Verse::Session.new( @address )
+		# 	other_session.connect( 'test2', 'test2' )
+		# 
+		# 	finished = false
+		# 	other_session.create_node( Verse::ObjectNode ) do |node|
+		# 		expect {
+		# 			@session.destroy_node( node )
+		# 		}.to raise_exception( Verse::SessionError, /alive/ )
+		# 		finished = true
+		# 	end
+		# 
+		# 	sleep 1 until finished
+		# end
 
 	end
 

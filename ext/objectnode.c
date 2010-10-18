@@ -113,7 +113,7 @@ rbverse_init_verse_objectnode( void ) {
 	rbverse_cVerseObjectNode = rb_define_class_under( rbverse_mVerse, "ObjectNode", rbverse_cVerseNode );
 
     /* Constants */
-	rb_define_const( rbverse_cVerseObjectNode, "TYPE_NUMBER", INT2FIX(V_NT_OBJECT) );
+	rb_define_const( rbverse_cVerseObjectNode, "TYPE_NUMBER", rb_uint2inum(V_NT_OBJECT) );
 
 	/* Initializer */
 	rb_define_method( rbverse_cVerseObjectNode, "initialize", rbverse_verse_objectnode_initialize, 0 );
