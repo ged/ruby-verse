@@ -59,8 +59,6 @@ task :compile => NODE_TYPE_SOURCES
 
 ### Generate a skeleton at +target+ for the specified +nodetype+ using the NODE_TYPE_TEMPLATE.
 def gen_nodetype_source( nodetype, target )
-	trace "nodetype is %p" % [ nodetype ]
-
 	template = ERB.new( NODE_TYPE_TEMPLATE.read, nil, '<>' )
 	sourcecode = template.result( binding() )
 
@@ -70,7 +68,7 @@ def gen_nodetype_source( nodetype, target )
 end
 
 rule NODE_TYPE_REGEX => NODE_TYPE_TEMPLATE.to_s do |task|
-	log "  creating %s from %s..." % [ task.name, NODE_TYPE_TEMPLATE ]
+	say "  creating %s from %s..." % [ task.name, NODE_TYPE_TEMPLATE ]
 	task.name =~ NODE_TYPE_REGEX
 	nodetype = $1 or abort "Ack! No nodetype?!?"
 	gen_nodetype_source( nodetype, task.name )
