@@ -7,6 +7,8 @@
 This is a Ruby binding for Verse. Verse is a network protocol that lets multiple applications act
 together as one large application by sharing data over a network.
 
+**It is still a work in progress.**
+
 
 ## Basic Design
 
